@@ -27,7 +27,8 @@ import type {
 } from '../../model/index.js';
 
 const NODE_MIN_WIDTH = 160;
-const NODE_PADDING_V = 6;
+const NODE_PADDING_TOP = 6;
+const NODE_PADDING_BOTTOM = 8;
 const NODE_PADDING_H = 8;
 const NAME_LINE_H = 18;
 const STEREO_LINE_H = 14;
@@ -345,9 +346,7 @@ function renderClassifierHtml(
   const attrsSection = attrLines ? `${sep}${attrLines}` : '';
   const opsSection = opLines ? `${sep}${opLines}` : '';
 
-  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_V}px ${NODE_PADDING_H}px;font-family:var(--vscode-font-family);font-size:11px;">
-      ${stereoHtml}${nameHtml}${attrsSection}${opsSection}
-    </div>`;
+  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
 }
 
 function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
@@ -355,7 +354,7 @@ function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
     c.kind === 'Interface' || !!(c as Class).stereotype;
   const attrs = childrenOf(model, c.id).filter(e => e.kind === 'Attribute').length;
   const ops = childrenOf(model, c.id).filter(e => e.kind === 'Operation').length;
-  let h = NODE_PADDING_V * 2 + NAME_LINE_H + (hasStereotype ? STEREO_LINE_H : 0);
+  let h = NODE_PADDING_TOP + NODE_PADDING_BOTTOM + NAME_LINE_H + (hasStereotype ? STEREO_LINE_H : 0);
   if (attrs > 0) h += SEPARATOR_H + attrs * MEMBER_LINE_H;
   if (ops > 0) h += SEPARATOR_H + ops * MEMBER_LINE_H;
   return h;
