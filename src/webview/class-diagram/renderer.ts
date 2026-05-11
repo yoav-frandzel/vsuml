@@ -271,7 +271,6 @@ function edgeStyle(
   const base: Record<string, unknown> = {
     strokeColor: 'var(--vscode-foreground)',
     fontColor: 'var(--vscode-editor-foreground)',
-    edgeStyle: 'orthogonalEdgeStyle',
     rounded: false,
     endSize: 10,
     startSize: 10
