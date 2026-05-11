@@ -10,7 +10,14 @@ import { createRoot } from 'react-dom/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Graph, type FitPlugin } from '@maxgraph/core';
 import { onHostMessage, post, log } from '../vscode-api.js';
-import { requestMutation, resolveAck } from '../shared/rpc.js';
+import {
+  confirm,
+  requestMutation,
+  resolveAck,
+  showInputBox,
+  showMessage,
+  showQuickPick
+} from '../shared/rpc.js';
 import type {
   ClassDiagramEdge,
   ClassDiagramFile,
@@ -91,7 +98,7 @@ const App: React.FC = () => {
       };
       updateDiagram({ ...cur, edges: [...cur.edges, newEdge] });
     },
-    onNodeActivated: viewNodeId => {
+    onNodeActivated: async viewNodeId => {
       const cur = stateRef.current.diagram;
       const model = stateRef.current.model;
       if (!cur || !model) return;
@@ -99,7 +106,10 @@ const App: React.FC = () => {
       if (!node) return;
       const el = model.elements[node.elementId];
       if (!el) return;
-      const name = window.prompt(`Rename ${el.kind}`, el.name);
+      const name = await showInputBox({
+        prompt: `Rename ${el.kind}`,
+        value: el.name
+      });
       if (name && name.trim() && name !== el.name) {
         void requestMutation({
           kind: 'renameElement',
@@ -108,15 +118,14 @@ const App: React.FC = () => {
         });
       }
     },
-    onNodeDeleted: viewNodeId => {
+    onNodeDeleted: async viewNodeId => {
       const cur = stateRef.current.diagram;
       if (!cur) return;
       const node = cur.nodes.find(n => n.id === viewNodeId);
       if (!node) return;
-      const remove = window.confirm(
-        'Remove this view node from the diagram?\n\n' +
-          'OK = remove from diagram only (class stays in model).\n' +
-          'Cancel = keep.'
+      const remove = await confirm(
+        'Remove this view node from the diagram? (The class stays in the model.)',
+        'Remove'
       );
       if (!remove) return;
       const nextEdges = cur.edges.filter(
@@ -128,14 +137,14 @@ const App: React.FC = () => {
         edges: nextEdges
       });
     },
-    onEdgeDeleted: viewEdgeId => {
+    onEdgeDeleted: async viewEdgeId => {
       const cur = stateRef.current.diagram;
       if (!cur) return;
       const edge = cur.edges.find(e => e.id === viewEdgeId);
       if (!edge) return;
-      const removeModel = window.confirm(
-        'Also delete the underlying relationship from the model?\n' +
-          'OK = delete from both. Cancel = remove from this diagram only.'
+      const removeModel = await confirm(
+        'Also delete the underlying relationship from the model? (Cancel removes from this diagram only.)',
+        'Delete from model'
       );
       if (removeModel) {
         void requestMutation({ kind: 'deleteElement', id: edge.elementId });
@@ -212,6 +221,22 @@ const App: React.FC = () => {
         case 'host.validation':
           setState(prev => ({ ...prev, issues: msg.issues }));
           break;
+        case 'host.addElement': {
+          const cur = stateRef.current.diagram;
+          if (!cur) break;
+          if (cur.nodes.some(n => n.elementId === msg.elementId)) break;
+          const offset = cur.nodes.length * 30;
+          const node: ClassDiagramNode = {
+            id: makeId(),
+            elementId: msg.elementId,
+            x: 60 + offset,
+            y: 60 + offset,
+            width: 200,
+            height: 120
+          };
+          updateDiagram({ ...cur, nodes: [...cur.nodes, node] });
+          break;
+        }
         case 'host.ack':
           resolveAck(msg);
           break;
@@ -240,7 +265,10 @@ const App: React.FC = () => {
   }, [updateDiagram]);
 
   const handleAddClass = useCallback(async () => {
-    const name = window.prompt('New class name', 'NewClass');
+    const name = await showInputBox({
+      prompt: 'New class name',
+      value: 'NewClass'
+    });
     if (!name) return;
     const model = stateRef.current.model;
     if (!model) return;
@@ -254,7 +282,10 @@ const App: React.FC = () => {
   }, [addExistingClassToDiagram]);
 
   const handleAddInterface = useCallback(async () => {
-    const name = window.prompt('New interface name', 'NewInterface');
+    const name = await showInputBox({
+      prompt: 'New interface name',
+      value: 'NewInterface'
+    });
     if (!name) return;
     const model = stateRef.current.model;
     if (!model) return;
@@ -267,7 +298,7 @@ const App: React.FC = () => {
     addExistingClassToDiagram(created.id);
   }, [addExistingClassToDiagram]);
 
-  const handleAddFromModel = useCallback(() => {
+  const handleAddFromModel = useCallback(async () => {
     const model = stateRef.current.model;
     if (!model) return;
     const cur = stateRef.current.diagram;
@@ -279,21 +310,19 @@ const App: React.FC = () => {
         !alreadyOnDiagram.has(e.id)
     );
     if (candidates.length === 0) {
-      window.alert('All model classifiers are already on this diagram.');
+      showMessage('info', 'All model classifiers are already on this diagram.');
       return;
     }
-    const choice = window.prompt(
-      'Add which model classifier? Enter the name.\n\nAvailable:\n' +
-        candidates.map(c => `  • ${c.name} (${c.kind})`).join('\n'),
-      candidates[0].name
+    const picked = await showQuickPick(
+      candidates.map(c => ({
+        label: c.name,
+        description: c.kind,
+        detail: c.id
+      })),
+      { placeHolder: 'Pick a class or interface to add to the diagram' }
     );
-    if (!choice) return;
-    const picked = candidates.find(c => c.name === choice.trim());
-    if (!picked) {
-      window.alert(`No classifier named "${choice}".`);
-      return;
-    }
-    addExistingClassToDiagram(picked.id);
+    if (!picked || !picked.detail) return;
+    addExistingClassToDiagram(picked.detail);
   }, [addExistingClassToDiagram]);
 
   const handleZoomFit = useCallback(() => {

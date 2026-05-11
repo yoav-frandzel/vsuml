@@ -1,12 +1,18 @@
 import { post, log } from '../vscode-api.js';
-import type { ModelMutationRequest } from '../../editors/protocol.js';
-import type { HostToView } from '../../editors/protocol.js';
+import type {
+  HostToView,
+  ModelMutationRequest
+} from '../../editors/protocol.js';
 
 let pendingRequestId = 0;
 const pendingRequests = new Map<
   string,
   (ok: boolean, data?: unknown, error?: string) => void
 >();
+
+function nextId(): string {
+  return `r${++pendingRequestId}`;
+}
 
 /**
  * Sends a `view.mutateModel` request to the host and resolves when the
@@ -17,7 +23,7 @@ export function requestMutation<T>(
   mutation: ModelMutationRequest
 ): Promise<T | undefined> {
   return new Promise(resolve => {
-    const requestId = `r${++pendingRequestId}`;
+    const requestId = nextId();
     pendingRequests.set(requestId, (ok, data, error) => {
       if (!ok) {
         log('error', `mutation failed: ${error}`);
@@ -28,6 +34,78 @@ export function requestMutation<T>(
     });
     post({ type: 'view.mutateModel', requestId, mutation });
   });
+}
+
+/**
+ * Show a VS Code QuickPick. Resolves to the chosen item, or undefined if
+ * the user cancelled. Pass element ids in `detail` to recover them on
+ * resolution.
+ */
+export function showQuickPick(
+  items: Array<{ label: string; description?: string; detail?: string }>,
+  options?: { placeHolder?: string; title?: string }
+): Promise<{ label: string; description?: string; detail?: string } | undefined> {
+  return new Promise(resolve => {
+    const requestId = nextId();
+    pendingRequests.set(requestId, (_ok, data) => {
+      resolve(
+        data as
+          | { label: string; description?: string; detail?: string }
+          | undefined
+      );
+    });
+    post({
+      type: 'view.quickPick',
+      requestId,
+      items,
+      placeHolder: options?.placeHolder,
+      title: options?.title
+    });
+  });
+}
+
+/** Show a VS Code InputBox. Resolves to the string entered, or undefined on cancel. */
+export function showInputBox(options?: {
+  prompt?: string;
+  value?: string;
+  placeHolder?: string;
+  title?: string;
+}): Promise<string | undefined> {
+  return new Promise(resolve => {
+    const requestId = nextId();
+    pendingRequests.set(requestId, (_ok, data) => {
+      const v = data as { value?: string } | undefined;
+      resolve(v?.value);
+    });
+    post({
+      type: 'view.inputBox',
+      requestId,
+      prompt: options?.prompt,
+      value: options?.value,
+      placeHolder: options?.placeHolder,
+      title: options?.title
+    });
+  });
+}
+
+/** Modal OK/Cancel confirmation. Resolves to true if confirmed. */
+export function confirm(message: string, okLabel?: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const requestId = nextId();
+    pendingRequests.set(requestId, (_ok, data) => {
+      const v = data as { confirmed?: boolean } | undefined;
+      resolve(v?.confirmed === true);
+    });
+    post({ type: 'view.confirm', requestId, message, okLabel });
+  });
+}
+
+/** Fire-and-forget notification toast. */
+export function showMessage(
+  level: 'info' | 'warn' | 'error',
+  message: string
+): void {
+  post({ type: 'view.showMessage', level, message });
 }
 
 /**

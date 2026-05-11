@@ -18,6 +18,7 @@ import type {
   Operation
 } from '../model/index.js';
 import type { ModelService } from '../model/model-service.js';
+import { getActiveDiagram } from '../editors/active-registry.js';
 
 export class ModelExplorerProvider
   implements vscode.TreeDataProvider<ModelTreeNode>, vscode.Disposable
@@ -289,10 +290,50 @@ export function registerExplorerCommands(
       'vsuml.explorer.delete',
       (node?: ElementTreeNode) => deleteElement(service, node)
     ),
+    vscode.commands.registerCommand(
+      'vsuml.explorer.addToActiveDiagram',
+      (node?: ElementTreeNode) => addToActiveDiagram(node)
+    ),
     vscode.commands.registerCommand('vsuml.explorer.refresh', () =>
       provider.refresh()
     )
   );
+}
+
+function addToActiveDiagram(node?: ElementTreeNode): void {
+  if (!node) {
+    vscode.window.showInformationMessage(
+      'VS UML: right-click an element in the Model Explorer.'
+    );
+    return;
+  }
+  const active = getActiveDiagram();
+  if (!active) {
+    vscode.window.showWarningMessage(
+      'VS UML: open a diagram first, then run this command.'
+    );
+    return;
+  }
+  const el = node.element;
+  if (active.viewKind === 'class' && el.kind !== 'Class' && el.kind !== 'Interface') {
+    vscode.window.showWarningMessage(
+      `VS UML: class diagrams accept Class or Interface, not ${el.kind}.`
+    );
+    return;
+  }
+  if (active.viewKind === 'sequence' && el.kind !== 'Class' && el.kind !== 'Interface') {
+    vscode.window.showWarningMessage(
+      `VS UML: sequence diagrams accept Class or Interface (as lifelines), not ${el.kind}.`
+    );
+    return;
+  }
+  if (active.viewKind === 'state') {
+    vscode.window.showWarningMessage(
+      'VS UML: state diagrams own their states; create new states with the diagram toolbar.'
+    );
+    return;
+  }
+  active.post({ type: 'host.addElement', elementId: el.id });
 }
 
 async function pickContainer(

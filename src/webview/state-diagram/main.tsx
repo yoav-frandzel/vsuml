@@ -9,7 +9,7 @@ import { createRoot } from 'react-dom/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Graph, type FitPlugin } from '@maxgraph/core';
 import { onHostMessage, post } from '../vscode-api.js';
-import { requestMutation, resolveAck } from '../shared/rpc.js';
+import { requestMutation, resolveAck, showInputBox } from '../shared/rpc.js';
 import type {
   ModelFile,
   StateDiagramEdge,
@@ -69,9 +69,18 @@ const App: React.FC = () => {
       const targetNode = cur.nodes.find(n => n.id === targetNodeId);
       if (!sourceNode || !targetNode) return;
 
-      const trigger = window.prompt('Trigger event (optional)') ?? undefined;
-      const guard = window.prompt('Guard expression (optional)') ?? undefined;
-      const effect = window.prompt('Effect / action (optional)') ?? undefined;
+      const trigger = await showInputBox({
+        prompt: 'Trigger event (optional)',
+        placeHolder: 'e.g. onSubmit'
+      });
+      const guard = await showInputBox({
+        prompt: 'Guard expression (optional)',
+        placeHolder: 'e.g. isValid'
+      });
+      const effect = await showInputBox({
+        prompt: 'Effect / action (optional)',
+        placeHolder: 'e.g. saveToDb()'
+      });
 
       const created = await requestMutation<{ id: string }>({
         kind: 'createTransition',
@@ -97,7 +106,7 @@ const App: React.FC = () => {
       if (!cur || !model) return;
       const el = model.elements[elementId];
       if (!el || el.kind !== 'State') return;
-      const name = window.prompt('Rename state', el.name);
+      const name = await showInputBox({ prompt: 'Rename state', value: el.name });
       if (!name) return;
       await requestMutation({
         kind: 'renameElement',
@@ -111,9 +120,9 @@ const App: React.FC = () => {
       if (!cur || !model) return;
       const el = model.elements[elementId];
       if (!el || el.kind !== 'Transition') return;
-      const trigger = window.prompt('Trigger', el.trigger ?? '') ?? undefined;
-      const guard = window.prompt('Guard', el.guard ?? '') ?? undefined;
-      const effect = window.prompt('Effect', el.effect ?? '') ?? undefined;
+      const trigger = await showInputBox({ prompt: 'Trigger', value: el.trigger ?? '' });
+      const guard = await showInputBox({ prompt: 'Guard', value: el.guard ?? '' });
+      const effect = await showInputBox({ prompt: 'Effect', value: el.effect ?? '' });
       await requestMutation({
         kind: 'updateElement',
         id: elementId,
@@ -214,6 +223,9 @@ const App: React.FC = () => {
         case 'host.validation':
           setState(prev => ({ ...prev, issues: msg.issues }));
           break;
+        case 'host.addElement':
+          // State diagrams are owned by a single StateMachine; ignore.
+          break;
         case 'host.ack':
           resolveAck(msg);
           break;
@@ -239,7 +251,7 @@ const App: React.FC = () => {
               : 'NewState';
       const name =
         stateKind === 'Simple' || stateKind === 'Composite'
-          ? window.prompt('State name', defaultName) ?? undefined
+          ? await showInputBox({ prompt: 'State name', value: defaultName })
           : defaultName;
       if (!name) return;
       const created = await requestMutation<{ id: string }>({

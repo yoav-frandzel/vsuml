@@ -80,6 +80,10 @@
       {
         "command": "vsuml.explorer.delete",
         "title": "Delete"
+      },
+      {
+        "command": "vsuml.explorer.addToActiveDiagram",
+        "title": "Add to active diagram"
       }
     ],
     "menus": {
@@ -135,6 +139,11 @@
           "command": "vsuml.explorer.delete",
           "when": "view == vsumlModelExplorer",
           "group": "2_edit@2"
+        },
+        {
+          "command": "vsuml.explorer.addToActiveDiagram",
+          "when": "view == vsumlModelExplorer && (viewItem == vsuml.Class || viewItem == vsuml.Interface)",
+          "group": "3_diagram@1"
         }
       ]
     },

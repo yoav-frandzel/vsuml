@@ -9,7 +9,14 @@
 import { createRoot } from 'react-dom/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { onHostMessage, post } from '../vscode-api.js';
-import { requestMutation, resolveAck } from '../shared/rpc.js';
+import {
+  confirm,
+  requestMutation,
+  resolveAck,
+  showInputBox,
+  showMessage,
+  showQuickPick
+} from '../shared/rpc.js';
 import type {
   Lifeline,
   ModelFile,
@@ -76,6 +83,24 @@ const App: React.FC = () => {
         case 'host.validation':
           setState(prev => ({ ...prev, issues: msg.issues }));
           break;
+        case 'host.addElement': {
+          const cur = stateRef.current.diagram;
+          const model = stateRef.current.model;
+          if (!cur || !model) break;
+          const el = model.elements[msg.elementId];
+          if (!el || (el.kind !== 'Class' && el.kind !== 'Interface')) break;
+          if (cur.lifelines.some(l => l.representsId === el.id)) break;
+          const lifeline: Lifeline = {
+            id: makeId(),
+            representsId: el.id,
+            x: 0,
+            y: 0,
+            width: LIFELINE_HEADER_W,
+            height: LIFELINE_HEADER_H
+          };
+          updateDiagram({ ...cur, lifelines: [...cur.lifelines, lifeline] });
+          break;
+        }
         case 'host.ack':
           resolveAck(msg);
           break;
@@ -87,7 +112,7 @@ const App: React.FC = () => {
 
   /* --- Toolbar actions --- */
 
-  const handleAddLifeline = useCallback(() => {
+  const handleAddLifeline = useCallback(async () => {
     const model = stateRef.current.model;
     const cur = stateRef.current.diagram;
     if (!model || !cur) return;
@@ -98,23 +123,20 @@ const App: React.FC = () => {
         !onDiagram.has(e.id)
     );
     if (candidates.length === 0) {
-      window.alert('No more model classifiers to add. Create one in a class diagram first.');
+      showMessage(
+        'info',
+        'No more model classifiers to add. Create one in a class diagram first.'
+      );
       return;
     }
-    const choice = window.prompt(
-      'Add which classifier as a lifeline? Enter name.\n\n' +
-        candidates.map(c => `  • ${c.name} (${c.kind})`).join('\n'),
-      candidates[0].name
+    const picked = await showQuickPick(
+      candidates.map(c => ({ label: c.name, description: c.kind, detail: c.id })),
+      { placeHolder: 'Pick a classifier to add as a lifeline' }
     );
-    if (!choice) return;
-    const picked = candidates.find(c => c.name === choice.trim());
-    if (!picked) {
-      window.alert(`No classifier named "${choice}".`);
-      return;
-    }
+    if (!picked || !picked.detail) return;
     const lifeline: Lifeline = {
       id: makeId(),
-      representsId: picked.id,
+      representsId: picked.detail,
       x: 0,
       y: 0,
       width: LIFELINE_HEADER_W,
@@ -128,74 +150,80 @@ const App: React.FC = () => {
     const cur = stateRef.current.diagram;
     if (!model || !cur) return;
     if (cur.lifelines.length < 1) {
-      window.alert('Add at least one lifeline first.');
+      showMessage('warn', 'Add at least one lifeline first.');
       return;
     }
-    const lifelinesList = cur.lifelines
-      .map((l, i) => `  ${i + 1}. ${lifelineLabel(model, l)}`)
-      .join('\n');
-    const srcIdx = parseInt(
-      window.prompt(`Source lifeline? Enter number:\n\n${lifelinesList}`, '1') ?? '',
-      10
-    );
-    if (!Number.isFinite(srcIdx) || srcIdx < 1 || srcIdx > cur.lifelines.length) return;
-    const tgtIdx = parseInt(
-      window.prompt(`Target lifeline? Enter number:\n\n${lifelinesList}`, String(srcIdx)) ?? '',
-      10
-    );
-    if (!Number.isFinite(tgtIdx) || tgtIdx < 1 || tgtIdx > cur.lifelines.length) return;
-    const kind = (window.prompt(
-      'Message kind? sync / async / reply / create / destroy',
-      'sync'
-    ) ?? '').trim() as SequenceMessage['kind'];
-    if (!['sync', 'async', 'reply', 'create', 'destroy'].includes(kind)) {
-      window.alert('Unknown kind.');
-      return;
-    }
+    const lifelineItems = cur.lifelines.map(l => ({
+      label: lifelineLabel(model, l),
+      detail: l.id
+    }));
+    const src = await showQuickPick(lifelineItems, {
+      placeHolder: 'Source lifeline (caller)'
+    });
+    if (!src || !src.detail) return;
+    const tgt = await showQuickPick(lifelineItems, {
+      placeHolder: 'Target lifeline (callee)'
+    });
+    if (!tgt || !tgt.detail) return;
 
-    const target = cur.lifelines[tgtIdx - 1];
+    const kindPick = await showQuickPick(
+      [
+        { label: 'sync', description: 'synchronous call (solid filled arrow)' },
+        { label: 'async', description: 'asynchronous call (open arrow)' },
+        { label: 'reply', description: 'return value (dashed)' },
+        { label: 'create', description: 'object creation' },
+        { label: 'destroy', description: 'object destruction' }
+      ],
+      { placeHolder: 'Message kind' }
+    );
+    if (!kindPick) return;
+    const kind = kindPick.label as SequenceMessage['kind'];
+
+    const target = cur.lifelines.find(l => l.id === tgt.detail);
+    if (!target) return;
     let operationId: string | undefined;
     let label: string | undefined;
 
     if (kind === 'sync' || kind === 'async') {
       const targetClass = model.elements[target.representsId];
       if (!targetClass) {
-        window.alert("Target lifeline's classifier is missing.");
+        showMessage('error', "Target lifeline's classifier is missing.");
         return;
       }
       const ops = Object.values(model.elements).filter(
         e => e.kind === 'Operation' && e.ownerId === target.representsId
       );
       if (ops.length === 0) {
-        const create = window.confirm(
-          `${targetClass.name} has no operations.\nCreate one to invoke?`
+        const create = await confirm(
+          `${targetClass.name} has no operations. Create one to invoke?`,
+          'Create operation'
         );
         if (!create) return;
-        const opName = window.prompt('Operation name', 'doSomething');
+        const opName = await showInputBox({
+          prompt: 'Operation name',
+          value: 'doSomething'
+        });
         if (!opName) return;
-        const created = (await requestMutation<{ id: string }>({
+        const created = await requestMutation<{ id: string }>({
           kind: 'createOperation',
           classifierId: target.representsId,
           name: opName.trim()
-        }));
+        });
         if (!created) return;
         operationId = created.id;
       } else {
-        const choice = window.prompt(
-          'Which operation?\n\n' +
-            ops.map(o => `  • ${o.name}`).join('\n'),
-          ops[0].name
+        const opPick = await showQuickPick(
+          ops.map(o => ({ label: o.name, detail: o.id })),
+          { placeHolder: `Which operation on ${targetClass.name}?` }
         );
-        if (!choice) return;
-        const picked = ops.find(o => o.name === choice.trim());
-        if (!picked) {
-          window.alert(`No operation named "${choice}".`);
-          return;
-        }
-        operationId = picked.id;
+        if (!opPick || !opPick.detail) return;
+        operationId = opPick.detail;
       }
     } else {
-      label = window.prompt('Message label (optional)') ?? undefined;
+      label = await showInputBox({
+        prompt: 'Message label (optional)',
+        placeHolder: kind === 'reply' ? 'return value' : ''
+      });
     }
 
     const nextY =
@@ -205,7 +233,7 @@ const App: React.FC = () => {
 
     const msg: SequenceMessage = {
       id: makeId(),
-      sourceLifelineId: cur.lifelines[srcIdx - 1].id,
+      sourceLifelineId: src.detail,
       targetLifelineId: target.id,
       kind,
       y: nextY,
@@ -215,14 +243,14 @@ const App: React.FC = () => {
     updateDiagram({ ...cur, messages: [...cur.messages, msg] });
   }, [updateDiagram]);
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (!selected) return;
     const cur = stateRef.current.diagram;
     if (!cur) return;
-    // Lifeline?
     if (cur.lifelines.some(l => l.id === selected)) {
-      const remove = window.confirm(
-        'Remove this lifeline and all its messages from the diagram?'
+      const remove = await confirm(
+        'Remove this lifeline and all its messages from the diagram?',
+        'Remove'
       );
       if (!remove) return;
       updateDiagram({
@@ -235,7 +263,6 @@ const App: React.FC = () => {
       setSelected(undefined);
       return;
     }
-    // Message?
     if (cur.messages.some(m => m.id === selected)) {
       updateDiagram({
         ...cur,

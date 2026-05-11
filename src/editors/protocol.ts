@@ -51,12 +51,23 @@ export interface HostAckMessage {
   data?: unknown;
 }
 
+/**
+ * Sent by the host (e.g. from a Model Explorer command) to add a model
+ * element to the active diagram. The webview decides whether the element
+ * is admissible and where to place it.
+ */
+export interface HostAddElementMessage {
+  type: 'host.addElement';
+  elementId: string;
+}
+
 export type HostToView =
   | HostInitMessage
   | HostModelChangedMessage
   | HostDiagramChangedMessage
   | HostValidationMessage
-  | HostAckMessage;
+  | HostAckMessage
+  | HostAddElementMessage;
 
 /* Webview → Host */
 
@@ -131,8 +142,42 @@ export interface ViewLogMessage {
   message: string;
 }
 
+export interface ViewQuickPickMessage {
+  type: 'view.quickPick';
+  requestId: string;
+  items: Array<{ label: string; description?: string; detail?: string }>;
+  placeHolder?: string;
+  title?: string;
+}
+
+export interface ViewInputBoxMessage {
+  type: 'view.inputBox';
+  requestId: string;
+  prompt?: string;
+  value?: string;
+  placeHolder?: string;
+  title?: string;
+}
+
+export interface ViewShowMessageMessage {
+  type: 'view.showMessage';
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface ViewConfirmMessage {
+  type: 'view.confirm';
+  requestId: string;
+  message: string;
+  okLabel?: string;
+}
+
 export type ViewToHost =
   | ViewReadyMessage
   | ViewUpdateDiagramMessage
   | ViewMutateModelMessage
-  | ViewLogMessage;
+  | ViewLogMessage
+  | ViewQuickPickMessage
+  | ViewInputBoxMessage
+  | ViewShowMessageMessage
+  | ViewConfirmMessage;

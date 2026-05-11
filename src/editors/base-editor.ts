@@ -20,6 +20,10 @@ import {
 } from '../model/index.js';
 import { renderDiagramHtml } from './webview-html.js';
 import type { HostToView, ViewKind, ViewToHost } from './protocol.js';
+import {
+  clearIfMatches,
+  setActiveDiagram
+} from './active-registry.js';
 
 export interface DiagramEditorConfig {
   viewType: string;
@@ -125,15 +129,90 @@ export class BaseDiagramEditor implements vscode.CustomTextEditorProvider {
           case 'view.log':
             log(raw.level, `[webview ${this.config.viewKind}] ${raw.message}`);
             break;
+          case 'view.quickPick': {
+            const pick = await vscode.window.showQuickPick(raw.items, {
+              placeHolder: raw.placeHolder,
+              title: raw.title
+            });
+            post({
+              type: 'host.ack',
+              requestId: raw.requestId,
+              ok: true,
+              data: pick
+                ? {
+                    label: pick.label,
+                    description: pick.description,
+                    detail: pick.detail
+                  }
+                : undefined
+            });
+            break;
+          }
+          case 'view.inputBox': {
+            const value = await vscode.window.showInputBox({
+              prompt: raw.prompt,
+              value: raw.value,
+              placeHolder: raw.placeHolder,
+              title: raw.title
+            });
+            post({
+              type: 'host.ack',
+              requestId: raw.requestId,
+              ok: true,
+              data: value === undefined ? undefined : { value }
+            });
+            break;
+          }
+          case 'view.confirm': {
+            const choice = await vscode.window.showWarningMessage(
+              raw.message,
+              { modal: true },
+              raw.okLabel ?? 'OK'
+            );
+            post({
+              type: 'host.ack',
+              requestId: raw.requestId,
+              ok: true,
+              data: { confirmed: choice !== undefined }
+            });
+            break;
+          }
+          case 'view.showMessage':
+            if (raw.level === 'error') vscode.window.showErrorMessage(raw.message);
+            else if (raw.level === 'warn') vscode.window.showWarningMessage(raw.message);
+            else vscode.window.showInformationMessage(raw.message);
+            break;
         }
       }
     );
+
+    const viewStateSub = webviewPanel.onDidChangeViewState(e => {
+      if (e.webviewPanel.active) {
+        setActiveDiagram({
+          uri: document.uri,
+          viewKind: this.config.viewKind,
+          post: msg => void post(msg)
+        });
+      } else {
+        clearIfMatches(document.uri);
+      }
+    });
 
     webviewPanel.onDidDispose(() => {
       modelSub.dispose();
       docSub.dispose();
       msgSub.dispose();
+      viewStateSub.dispose();
+      clearIfMatches(document.uri);
     });
+
+    if (webviewPanel.active) {
+      setActiveDiagram({
+        uri: document.uri,
+        viewKind: this.config.viewKind,
+        post: msg => void post(msg)
+      });
+    }
   }
 
   /* -------------------------------------------------------------- */
