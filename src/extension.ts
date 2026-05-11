@@ -29,9 +29,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const provider = new ModelExplorerProvider(modelService);
     context.subscriptions.push(provider);
-    context.subscriptions.push(
-      vscode.window.registerTreeDataProvider('vsumlModelExplorer', provider)
-    );
+    const explorerView = vscode.window.createTreeView('vsumlModelExplorer', {
+      treeDataProvider: provider,
+      dragAndDropController: provider,
+      canSelectMany: false
+    });
+    context.subscriptions.push(explorerView);
     registerExplorerCommands(context, modelService, provider);
 
     context.subscriptions.push(

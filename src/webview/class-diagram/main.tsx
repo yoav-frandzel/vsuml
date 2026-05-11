@@ -221,6 +221,64 @@ const App: React.FC = () => {
     }
   }, [state.model, state.diagram]);
 
+  // Drag-and-drop from the Model Explorer.
+  // Using a ref because addExistingClassToDiagram is declared later in the
+  // component body.
+  const addRef = useRef<
+    (elementId: string, position?: { x: number; y: number }) => void
+  >(() => {});
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer) return;
+      const types = Array.from(e.dataTransfer.types);
+      if (!types.includes('text/plain')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDrop = (e: DragEvent) => {
+      const raw = e.dataTransfer?.getData('text/plain');
+      if (!raw) return;
+      let payload: { kind?: string; ids?: string[] } | undefined;
+      try {
+        payload = JSON.parse(raw) as { kind?: string; ids?: string[] };
+      } catch {
+        return;
+      }
+      if (payload?.kind !== 'vsuml.elements' || !Array.isArray(payload.ids)) return;
+      const model = stateRef.current.model;
+      if (!model) return;
+      e.preventDefault();
+      const g = graphRef.current;
+      let dropX = 60;
+      let dropY = 60;
+      if (g) {
+        const rect = el.getBoundingClientRect();
+        const view = g.view;
+        const scale = view.scale || 1;
+        const tx = view.translate?.x ?? 0;
+        const ty = view.translate?.y ?? 0;
+        dropX = (e.clientX - rect.left) / scale - tx;
+        dropY = (e.clientY - rect.top) / scale - ty;
+      }
+      let offsetX = 0;
+      for (const id of payload.ids) {
+        const m = model.elements[id];
+        if (!m) continue;
+        if (m.kind !== 'Class' && m.kind !== 'Interface') continue;
+        addRef.current(id, { x: dropX + offsetX, y: dropY });
+        offsetX += 30;
+      }
+    };
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragover', onDragOver);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   // Host message subscription.
   useEffect(() => {
     const off = onHostMessage(msg => {
@@ -277,21 +335,25 @@ const App: React.FC = () => {
 
   /* Toolbar handlers */
 
-  const addExistingClassToDiagram = useCallback((elementId: string) => {
-    const cur = stateRef.current.diagram;
-    if (!cur) return;
-    if (cur.nodes.some(n => n.elementId === elementId)) return;
-    const offset = cur.nodes.length * 30;
-    const node: ClassDiagramNode = {
-      id: makeId(),
-      elementId,
-      x: 60 + offset,
-      y: 60 + offset,
-      width: 200,
-      height: 120
-    };
-    updateDiagram({ ...cur, nodes: [...cur.nodes, node] });
-  }, [updateDiagram]);
+  const addExistingClassToDiagram = useCallback(
+    (elementId: string, position?: { x: number; y: number }) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      if (cur.nodes.some(n => n.elementId === elementId)) return;
+      const offset = cur.nodes.length * 30;
+      const node: ClassDiagramNode = {
+        id: makeId(),
+        elementId,
+        x: position ? position.x : 60 + offset,
+        y: position ? position.y : 60 + offset,
+        width: 200,
+        height: 120
+      };
+      updateDiagram({ ...cur, nodes: [...cur.nodes, node] });
+    },
+    [updateDiagram]
+  );
+  addRef.current = addExistingClassToDiagram;
 
   const handleAddClass = useCallback(async () => {
     const name = await showInputBox({

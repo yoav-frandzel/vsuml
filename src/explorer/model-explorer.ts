@@ -20,13 +20,21 @@ import type {
 import type { ModelService } from '../model/model-service.js';
 import { getActiveDiagram } from '../editors/active-registry.js';
 
+export const VSUML_DRAG_MIME = 'application/vnd.vsuml.element-ids';
+
 export class ModelExplorerProvider
-  implements vscode.TreeDataProvider<ModelTreeNode>, vscode.Disposable
+  implements
+    vscode.TreeDataProvider<ModelTreeNode>,
+    vscode.TreeDragAndDropController<ModelTreeNode>,
+    vscode.Disposable
 {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<
     ModelTreeNode | undefined
   >();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  readonly dragMimeTypes = [VSUML_DRAG_MIME, 'text/plain'];
+  readonly dropMimeTypes: readonly string[] = [];
 
   private readonly _disposables: vscode.Disposable[] = [];
 
@@ -34,6 +42,21 @@ export class ModelExplorerProvider
     this._disposables.push(
       service.onDidChange(() => this._onDidChangeTreeData.fire(undefined))
     );
+  }
+
+  handleDrag(
+    source: readonly ModelTreeNode[],
+    dataTransfer: vscode.DataTransfer
+  ): void {
+    const ids = source
+      .map(n => n.element.id)
+      .filter((s): s is string => !!s);
+    if (ids.length === 0) return;
+    const payload = JSON.stringify({ kind: 'vsuml.elements', ids });
+    // Custom MIME for safety + text/plain so the webview drop target
+    // (HTML5 DataTransfer) can read it.
+    dataTransfer.set(VSUML_DRAG_MIME, new vscode.DataTransferItem(payload));
+    dataTransfer.set('text/plain', new vscode.DataTransferItem(payload));
   }
 
   dispose(): void {

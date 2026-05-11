@@ -281,6 +281,60 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleDelete]);
 
+  // Drag-and-drop from the Model Explorer: append lifelines.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer) return;
+      const types = Array.from(e.dataTransfer.types);
+      if (!types.includes('text/plain')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDrop = (e: DragEvent) => {
+      const raw = e.dataTransfer?.getData('text/plain');
+      if (!raw) return;
+      let payload: { kind?: string; ids?: string[] } | undefined;
+      try {
+        payload = JSON.parse(raw) as { kind?: string; ids?: string[] };
+      } catch {
+        return;
+      }
+      if (payload?.kind !== 'vsuml.elements' || !Array.isArray(payload.ids)) return;
+      const model = stateRef.current.model;
+      const cur = stateRef.current.diagram;
+      if (!model || !cur) return;
+      e.preventDefault();
+      const onDiagram = new Set(cur.lifelines.map(l => l.representsId));
+      const toAdd: Lifeline[] = [];
+      for (const id of payload.ids) {
+        const m = model.elements[id];
+        if (!m) continue;
+        if (m.kind !== 'Class' && m.kind !== 'Interface') continue;
+        if (onDiagram.has(id)) continue;
+        onDiagram.add(id);
+        toAdd.push({
+          id: makeId(),
+          representsId: id,
+          x: 0,
+          y: 0,
+          width: LIFELINE_HEADER_W,
+          height: LIFELINE_HEADER_H
+        });
+      }
+      if (toAdd.length === 0) return;
+      updateDiagram({ ...cur, lifelines: [...cur.lifelines, ...toAdd] });
+    };
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragover', onDragOver);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, [updateDiagram]);
+
   return (
     <>
       <div className="vsuml-toolbar">
@@ -293,7 +347,7 @@ const App: React.FC = () => {
           {state.issues.length > 0 && ` · ⚠ ${state.issues.length} issue(s)`}
         </span>
       </div>
-      <div className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
+      <div ref={canvasRef} className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
         {state.diagram ? (
           <SequenceSvg
             model={state.model}
