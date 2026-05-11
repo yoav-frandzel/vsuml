@@ -54,6 +54,10 @@ const App: React.FC = () => {
   const edgeKindRef = useRef(edgeKind);
   edgeKindRef.current = edgeKind;
 
+  const [nodeMenu, setNodeMenu] = useState<
+    { viewNodeId: string; x: number; y: number } | undefined
+  >();
+
   /** Updates the local diagram, persists it through the host, and re-renders. */
   const updateDiagram = useCallback((next: ClassDiagramFile) => {
     setState(prev => ({ ...prev, diagram: next }));
@@ -165,6 +169,9 @@ const App: React.FC = () => {
         edges: nextEdges
       });
     },
+    onNodeContextMenu: (viewNodeId, x, y) => {
+      setNodeMenu({ viewNodeId, x, y });
+    },
     onEdgeDeleted: async viewEdgeId => {
       const cur = stateRef.current.diagram;
       if (!cur) return;
@@ -203,6 +210,8 @@ const App: React.FC = () => {
       onEdgeRequested: m => callbacksRef.current.onEdgeRequested(m),
       onNodeActivated: id => callbacksRef.current.onNodeActivated(id),
       onEdgeActivated: id => callbacksRef.current.onEdgeActivated(id),
+      onNodeContextMenu: (id, x, y) =>
+        callbacksRef.current.onNodeContextMenu(id, x, y),
       onNodeDeleted: id => callbacksRef.current.onNodeDeleted(id),
       onEdgeDeleted: id => callbacksRef.current.onEdgeDeleted(id)
     });
@@ -413,6 +422,26 @@ const App: React.FC = () => {
     plugin?.fit({ margin: 24 });
   }, []);
 
+  // Dismiss the node context menu on any document interaction outside it.
+  useEffect(() => {
+    if (!nodeMenu) return;
+    const dismiss = () => setNodeMenu(undefined);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismiss();
+    };
+    const t = setTimeout(() => {
+      window.addEventListener('mousedown', dismiss, true);
+      window.addEventListener('contextmenu', dismiss, true);
+      window.addEventListener('keydown', onKey, true);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('mousedown', dismiss, true);
+      window.removeEventListener('contextmenu', dismiss, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [nodeMenu]);
+
   return (
     <>
       <Toolbar
@@ -428,6 +457,60 @@ const App: React.FC = () => {
         onZoomFit={handleZoomFit}
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
+      {nodeMenu && (
+        <div
+          role="menu"
+          style={{
+            position: 'fixed',
+            left: nodeMenu.x,
+            top: nodeMenu.y,
+            zIndex: 1000,
+            background: 'var(--vscode-menu-background)',
+            color: 'var(--vscode-menu-foreground)',
+            border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            padding: '4px 0',
+            minWidth: 160,
+            fontFamily: 'var(--vscode-font-family)',
+            fontSize: 12
+          }}
+          onMouseDown={e => e.stopPropagation()}
+          onContextMenu={e => e.preventDefault()}
+        >
+          <button
+            role="menuitem"
+            onClick={() => {
+              const id = nodeMenu.viewNodeId;
+              setNodeMenu(undefined);
+              void callbacks.onNodeDeleted(id);
+            }}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: '4px 12px',
+              background: 'transparent',
+              color: 'inherit',
+              border: 0,
+              textAlign: 'left',
+              cursor: 'pointer'
+            }}
+            onMouseOver={e => {
+              (e.currentTarget as HTMLElement).style.background =
+                'var(--vscode-menu-selectionBackground)';
+              (e.currentTarget as HTMLElement).style.color =
+                'var(--vscode-menu-selectionForeground)';
+            }}
+            onMouseOut={e => {
+              (e.currentTarget as HTMLElement).style.background = 'transparent';
+              (e.currentTarget as HTMLElement).style.color = 'inherit';
+            }}
+          >
+            <span>Delete</span>
+            <span style={{ opacity: 0.7, marginLeft: 16 }}>Del</span>
+          </button>
+        </div>
+      )}
     </>
   );
 };

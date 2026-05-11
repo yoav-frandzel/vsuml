@@ -47,6 +47,8 @@ export interface ClassRendererCallbacks {
   onEdgeRequested(req: { sourceNodeId: string; targetNodeId: string }): void;
   /** Double-click on a node — surfaces an edit intent to the host. */
   onNodeActivated(viewNodeId: string): void;
+  /** Right-click on a node — host shows a Delete-only popup at the click. */
+  onNodeContextMenu(viewNodeId: string, clientX: number, clientY: number): void;
   /** Double-click on an edge — surfaces an edit intent to the host. */
   onEdgeActivated(viewEdgeId: string): void;
   /** A node was deleted via the keyboard (Delete key). */
@@ -232,16 +234,22 @@ export class ClassDiagramRenderer {
       }
     });
 
-    // Right-click on an edge: same effect as double-click (change type).
+    // Right-click handler. Always suppress the webview's default
+    // Cut/Copy/Paste menu inside the canvas; for edges we open the
+    // change-type picker, for nodes we open a Delete popup.
     this.graph.getContainer().addEventListener('contextmenu', (e: MouseEvent) => {
       const container = this.graph.getContainer();
       const rect = container.getBoundingClientRect();
       const cell = this.graph.getCellAt(e.clientX - rect.left, e.clientY - rect.top);
-      if (!cell || !cell.isEdge()) return;
-      const id = idFromCell(cell, 'edge');
-      if (!id) return;
       e.preventDefault();
-      this.callbacks.onEdgeActivated(id);
+      if (!cell) return;
+      if (cell.isEdge()) {
+        const id = idFromCell(cell, 'edge');
+        if (id) this.callbacks.onEdgeActivated(id);
+      } else if (cell.isVertex()) {
+        const id = idFromCell(cell, 'node');
+        if (id) this.callbacks.onNodeContextMenu(id, e.clientX, e.clientY);
+      }
     });
 
     // Delete key removes the selection.
