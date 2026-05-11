@@ -232,6 +232,18 @@ export class ClassDiagramRenderer {
       }
     });
 
+    // Right-click on an edge: same effect as double-click (change type).
+    this.graph.getContainer().addEventListener('contextmenu', (e: MouseEvent) => {
+      const container = this.graph.getContainer();
+      const rect = container.getBoundingClientRect();
+      const cell = this.graph.getCellAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (!cell || !cell.isEdge()) return;
+      const id = idFromCell(cell, 'edge');
+      if (!id) return;
+      e.preventDefault();
+      this.callbacks.onEdgeActivated(id);
+    });
+
     // Delete key removes the selection.
     this.graph.getContainer().addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -271,7 +283,7 @@ function classifierStyle(c: Class | Interface): Record<string, unknown> {
 }
 
 function edgeStyle(
-  kind: 'Association' | 'Generalization' | 'Dependency' | 'Realization'
+  kind: 'Association' | 'Generalization' | 'Dependency'
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
     strokeColor: 'var(--vscode-foreground)',
@@ -283,8 +295,6 @@ function edgeStyle(
   switch (kind) {
     case 'Generalization':
       return { ...base, endArrow: 'block', endFill: 0 };
-    case 'Realization':
-      return { ...base, endArrow: 'block', endFill: 0, dashed: 1 };
     case 'Dependency':
       return { ...base, endArrow: 'open', dashed: 1 };
     case 'Association':

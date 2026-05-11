@@ -129,8 +129,7 @@ const App: React.FC = () => {
       const kinds: RelationshipKind[] = [
         'Association',
         'Generalization',
-        'Dependency',
-        'Realization'
+        'Dependency'
       ];
       const picked = await showQuickPick(
         kinds.map(k => ({

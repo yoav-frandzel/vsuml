@@ -8,8 +8,7 @@ import type {
 export type RelationshipKind =
   | 'Association'
   | 'Generalization'
-  | 'Dependency'
-  | 'Realization';
+  | 'Dependency';
 
 interface ToolbarProps {
   diagram: ClassDiagramFile | undefined;
@@ -67,7 +66,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <option value="Association">Association</option>
           <option value="Generalization">Generalization</option>
           <option value="Dependency">Dependency</option>
-          <option value="Realization">Realization</option>
         </select>
       </label>
       <button

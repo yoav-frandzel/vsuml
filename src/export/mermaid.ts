@@ -89,11 +89,9 @@ function classDiagramToMermaid(
     const arrow =
       rel.relKind === 'Generalization'
         ? '<|--'
-        : rel.relKind === 'Realization'
-          ? '<|..'
-          : rel.relKind === 'Dependency'
-            ? '..>'
-            : '-->';
+        : rel.relKind === 'Dependency'
+          ? '..>'
+          : '-->';
     lines.push(`  ${b} ${arrow} ${a}`);
   }
   return lines.join('\n') + '\n';

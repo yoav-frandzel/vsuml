@@ -90,8 +90,7 @@ export interface Operation extends ModelElementBase {
 export type RelationshipKind =
   | 'Association'
   | 'Generalization'
-  | 'Dependency'
-  | 'Realization';
+  | 'Dependency';
 
 export interface AssociationEnd {
   /** Optional role name shown on the end. */

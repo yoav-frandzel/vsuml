@@ -37,8 +37,8 @@ describe('diagramToMermaid (class)', () => {
     const op = createOperation('checkout', ord.id, 'public', 'boolean');
     const attr = createAttribute('total', ord.id, 'number', 'private');
     const rel = createRelationship('Association', cust.id, ord.id, rootId);
-    const realization = createRelationship('Realization', ord.id, iface.id, rootId);
-    for (const e of [cust, ord, iface, op, attr, rel, realization]) {
+    const generalization = createRelationship('Generalization', ord.id, iface.id, rootId);
+    for (const e of [cust, ord, iface, op, attr, rel, generalization]) {
       model.elements[e.id] = e;
     }
     const diagram: ClassDiagramFile = {
@@ -52,7 +52,7 @@ describe('diagramToMermaid (class)', () => {
       ],
       edges: [
         { id: 'e1', elementId: rel.id, sourceNodeId: 'n1', targetNodeId: 'n2' },
-        { id: 'e2', elementId: realization.id, sourceNodeId: 'n2', targetNodeId: 'n3' }
+        { id: 'e2', elementId: generalization.id, sourceNodeId: 'n2', targetNodeId: 'n3' }
       ]
     };
     const out = diagramToMermaid(model, diagram);
@@ -63,7 +63,7 @@ describe('diagramToMermaid (class)', () => {
     expect(out).toContain('+checkout()');
     expect(out).toContain('-total');
     expect(out).toContain('Order --> Customer');
-    expect(out).toContain('Identifiable <|.. Order');
+    expect(out).toContain('Identifiable <|-- Order');
   });
 });
 
