@@ -20,6 +20,7 @@ interface ToolbarProps {
   onAddClass(): void;
   onAddInterface(): void;
   onAddModelClass(): void;
+  onAddEdge(): void;
   onZoomFit(): void;
 }
 
@@ -40,6 +41,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddClass,
   onAddInterface,
   onAddModelClass,
+  onAddEdge,
   onZoomFit
 }) => {
   const elementCount = model ? Object.keys(model.elements).length : 0;
@@ -68,6 +70,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <option value="Realization">Realization</option>
         </select>
       </label>
+      <button
+        onClick={onAddEdge}
+        title="Pick a source and target classifier to connect"
+      >
+        + Edge…
+      </button>
       <button onClick={onZoomFit}>Fit</button>
       <span className="vsuml-toolbar-info">
         {elementCount} model element(s) · {diagram?.nodes.length ?? 0} node(s) · {diagram?.edges.length ?? 0} edge(s){issueLabel}

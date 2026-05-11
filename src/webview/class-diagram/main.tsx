@@ -325,6 +325,55 @@ const App: React.FC = () => {
     addExistingClassToDiagram(picked.detail);
   }, [addExistingClassToDiagram]);
 
+  const handleAddEdge = useCallback(async () => {
+    const cur = stateRef.current.diagram;
+    const model = stateRef.current.model;
+    if (!cur || !model) return;
+    if (cur.nodes.length < 2) {
+      showMessage(
+        'info',
+        'Add at least two classifiers to the diagram before creating an edge.'
+      );
+      return;
+    }
+    type EdgePickItem = { label: string; description: string; detail: string };
+    const items: EdgePickItem[] = cur.nodes.flatMap(n => {
+      const el = model.elements[n.elementId];
+      if (!el) return [];
+      return [{ label: el.name, description: String(el.kind), detail: n.id }];
+    });
+
+    const source = await showQuickPick(items, {
+      placeHolder: `Source for new ${edgeKindRef.current}`
+    });
+    if (!source || !source.detail) return;
+    const target = await showQuickPick(
+      items.filter(i => i.detail !== source.detail),
+      { placeHolder: `Target for new ${edgeKindRef.current}` }
+    );
+    if (!target || !target.detail) return;
+
+    const sourceNode = cur.nodes.find(n => n.id === source.detail);
+    const targetNode = cur.nodes.find(n => n.id === target.detail);
+    if (!sourceNode || !targetNode) return;
+    const result = await requestMutation<{ id: string }>({
+      kind: 'createRelationship',
+      relKind: edgeKindRef.current,
+      sourceId: sourceNode.elementId,
+      targetId: targetNode.elementId
+    });
+    if (!result) return;
+    const latest = stateRef.current.diagram;
+    if (!latest) return;
+    const newEdge: ClassDiagramEdge = {
+      id: makeId(),
+      elementId: result.id,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id
+    };
+    updateDiagram({ ...latest, edges: [...latest.edges, newEdge] });
+  }, [updateDiagram]);
+
   const handleZoomFit = useCallback(() => {
     const g = graphRef.current;
     if (!g) return;
@@ -343,6 +392,7 @@ const App: React.FC = () => {
         onAddClass={handleAddClass}
         onAddInterface={handleAddInterface}
         onAddModelClass={handleAddFromModel}
+        onAddEdge={handleAddEdge}
         onZoomFit={handleZoomFit}
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />

@@ -26,10 +26,13 @@ import type {
   Relationship
 } from '../../model/index.js';
 
-const NODE_MIN_WIDTH = 180;
-const NODE_MIN_HEIGHT = 90;
-const COMPARTMENT_HEADER_HEIGHT = 28;
-const COMPARTMENT_LINE_HEIGHT = 18;
+const NODE_MIN_WIDTH = 160;
+const NODE_PADDING_V = 5;
+const NODE_PADDING_H = 8;
+const NAME_LINE_H = 18;
+const STEREO_LINE_H = 14;
+const MEMBER_LINE_H = 16;
+const COMPARTMENT_GAP = 7;
 
 export interface ClassRendererCallbacks {
   /** Called when the user moves one or more nodes on the canvas. */
@@ -104,11 +107,11 @@ export class ClassDiagramRenderer {
       return;
     }
     const html = renderClassifierHtml(model, classifier as Class | Interface);
+    const computedH = computeNodeHeight(model, classifier as Class | Interface);
     const w = Math.max(NODE_MIN_WIDTH, n.width || NODE_MIN_WIDTH);
-    const h = Math.max(
-      NODE_MIN_HEIGHT,
-      n.height || computeNodeHeight(model, classifier as Class | Interface)
-    );
+    // Always size height to fit the content tightly; ignore any stale stored
+    // height. Width is preserved so the user can widen a node manually.
+    const h = computedH;
     const style = classifierStyle(classifier as Class | Interface);
 
     let cell = this._vertexById.get(n.id);
@@ -246,16 +249,17 @@ export class ClassDiagramRenderer {
 function classifierStyle(c: Class | Interface): Record<string, unknown> {
   return {
     shape: 'rectangle',
-    rounded: false,
+    rounded: 1,
+    arcSize: 14,
     html: 1,
     whiteSpace: 'wrap',
     fillColor: 'var(--vscode-editorWidget-background)',
-    strokeColor: 'var(--vscode-foreground)',
+    strokeColor: 'var(--vscode-panel-border, var(--vscode-foreground))',
     fontColor: 'var(--vscode-editor-foreground)',
     align: 'left',
     verticalAlign: 'top',
     spacing: 0,
-    strokeWidth: c.kind === 'Interface' ? 1.5 : 1
+    strokeWidth: c.kind === 'Interface' ? 1.4 : 1.1
   };
 }
 
@@ -297,59 +301,63 @@ function renderClassifierHtml(
 ): string {
   const stereotype =
     c.kind === 'Interface' ? '«interface»' : c.stereotype ? `«${c.stereotype}»` : '';
-  const nameHtml = `<div style="font-weight:600;${c.isAbstract ? 'font-style:italic;' : ''}">${escapeHtml(c.name)}</div>`;
-  const stereotypeHtml = stereotype
-    ? `<div style="font-size:11px;opacity:0.8;">${escapeHtml(stereotype)}</div>`
-    : '';
-
   const attrs = childrenOf(model, c.id).filter(e => e.kind === 'Attribute');
   const ops = childrenOf(model, c.id).filter(e => e.kind === 'Operation');
 
-  const attrsHtml = attrs
+  const stereoHtml = stereotype
+    ? `<div style="font-size:10px;opacity:0.75;line-height:1.25;text-align:center;">${escapeHtml(stereotype)}</div>`
+    : '';
+  const nameHtml = `<div style="font-weight:600;${c.isAbstract ? 'font-style:italic;' : ''}text-align:center;line-height:1.3;">${escapeHtml(c.name)}</div>`;
+
+  const sep = `<div style="border-top:1px solid var(--vscode-foreground);opacity:0.35;margin:4px -${NODE_PADDING_H}px;"></div>`;
+
+  const lineStyle =
+    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35;';
+
+  const attrLines = attrs
     .map(a => {
       const attr = a as Extract<ModelElement, { kind: 'Attribute' }>;
-      return `<div>${escapeHtml(vis(attr.visibility))} ${escapeHtml(attr.name)}: ${escapeHtml(attr.type)}</div>`;
+      return `<div style="${lineStyle}">${escapeHtml(vis(attr.visibility))} ${escapeHtml(attr.name)}: ${escapeHtml(attr.type)}</div>`;
     })
     .join('');
-  const opsHtml = ops
+  const opLines = ops
     .map(o => {
       const op = o as Operation;
       const params = op.parameterIds
         .map(pid => model.elements[pid])
         .filter(p => p && p.kind === 'Parameter')
-        .map(p => `${escapeHtml(p.name)}: ${escapeHtml((p as Extract<ModelElement, { kind: 'Parameter' }>).type)}`)
+        .map(
+          p =>
+            `${escapeHtml(p.name)}: ${escapeHtml(
+              (p as Extract<ModelElement, { kind: 'Parameter' }>).type
+            )}`
+        )
         .join(', ');
       const ret = op.returnType ? `: ${escapeHtml(op.returnType)}` : '';
       const abstract = op.isAbstract ? 'font-style:italic;' : '';
-      return `<div style="${abstract}">${escapeHtml(vis(op.visibility))} ${escapeHtml(op.name)}(${params})${ret}</div>`;
+      return `<div style="${abstract}${lineStyle}">${escapeHtml(vis(op.visibility))} ${escapeHtml(op.name)}(${params})${ret}</div>`;
     })
     .join('');
 
-  return `
-    <div style="display:flex;flex-direction:column;height:100%;font-family:var(--vscode-font-family);font-size:12px;">
-      <div style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--vscode-foreground);">
-        ${stereotypeHtml}
-        ${nameHtml}
-      </div>
-      <div style="padding:4px 6px;border-bottom:1px solid var(--vscode-foreground);min-height:18px;">
-        ${attrsHtml || '<div style="opacity:0.4;">(no attributes)</div>'}
-      </div>
-      <div style="padding:4px 6px;min-height:18px;">
-        ${opsHtml || '<div style="opacity:0.4;">(no operations)</div>'}
-      </div>
-    </div>
-  `;
+  const attrsSection = attrLines ? `${sep}${attrLines}` : '';
+  const opsSection = opLines ? `${sep}${opLines}` : '';
+
+  return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_V}px ${NODE_PADDING_H}px;font-family:var(--vscode-font-family);font-size:11px;line-height:1.35;">
+      <div>${stereoHtml}${nameHtml}</div>
+      ${attrsSection}
+      ${opsSection}
+    </div>`;
 }
 
 function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
+  const hasStereotype =
+    c.kind === 'Interface' || !!(c as Class).stereotype;
   const attrs = childrenOf(model, c.id).filter(e => e.kind === 'Attribute').length;
   const ops = childrenOf(model, c.id).filter(e => e.kind === 'Operation').length;
-  return (
-    COMPARTMENT_HEADER_HEIGHT +
-    Math.max(1, attrs) * COMPARTMENT_LINE_HEIGHT +
-    Math.max(1, ops) * COMPARTMENT_LINE_HEIGHT +
-    16
-  );
+  let h = NODE_PADDING_V * 2 + NAME_LINE_H + (hasStereotype ? STEREO_LINE_H : 0);
+  if (attrs > 0) h += COMPARTMENT_GAP + attrs * MEMBER_LINE_H;
+  if (ops > 0) h += COMPARTMENT_GAP + ops * MEMBER_LINE_H;
+  return Math.max(h, NAME_LINE_H + NODE_PADDING_V * 2 + 4);
 }
 
 function childrenOf(model: ModelFile, ownerId: string): ModelElement[] {
