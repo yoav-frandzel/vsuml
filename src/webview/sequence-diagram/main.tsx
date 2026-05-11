@@ -283,23 +283,28 @@ const App: React.FC = () => {
 
   // Drag-and-drop from the Model Explorer: signal the host, which posts
   // host.addElement back with the pending drag's ids.
+  // Listen on window with capture so the SVG layer can't intercept.
   const canvasRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
+    const inCanvas = (t: EventTarget | null): boolean =>
+      t instanceof Node && el.contains(t);
     const onDragOver = (e: DragEvent) => {
+      if (!inCanvas(e.target)) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     };
     const onDrop = (e: DragEvent) => {
+      if (!inCanvas(e.target)) return;
       e.preventDefault();
       post({ type: 'view.dropped' });
     };
-    el.addEventListener('dragover', onDragOver);
-    el.addEventListener('drop', onDrop);
+    window.addEventListener('dragover', onDragOver, true);
+    window.addEventListener('drop', onDrop, true);
     return () => {
-      el.removeEventListener('dragover', onDragOver);
-      el.removeEventListener('drop', onDrop);
+      window.removeEventListener('dragover', onDragOver, true);
+      window.removeEventListener('drop', onDrop, true);
     };
   }, []);
 

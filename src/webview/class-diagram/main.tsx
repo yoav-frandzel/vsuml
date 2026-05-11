@@ -225,15 +225,22 @@ const App: React.FC = () => {
   // VS Code's TreeView DataTransfer payload doesn't cross the webview iframe
   // boundary, so we just signal the host on drop; the host has the pending
   // drag's element ids and replies with host.addElement.
+  //
+  // Listen on `window` in capture phase so maxGraph's internal handlers can't
+  // swallow the drag events before us. Gate on whether the target is inside
+  // the canvas so we don't react to drops on the toolbar.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
+    const inCanvas = (t: EventTarget | null): boolean =>
+      t instanceof Node && el.contains(t);
     const onDragOver = (e: DragEvent) => {
-      // Accept any drag; the host decides whether anything is pending.
+      if (!inCanvas(e.target)) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     };
     const onDrop = (e: DragEvent) => {
+      if (!inCanvas(e.target)) return;
       e.preventDefault();
       const g = graphRef.current;
       let x: number | undefined;
@@ -249,11 +256,11 @@ const App: React.FC = () => {
       }
       post({ type: 'view.dropped', x, y });
     };
-    el.addEventListener('dragover', onDragOver);
-    el.addEventListener('drop', onDrop);
+    window.addEventListener('dragover', onDragOver, true);
+    window.addEventListener('drop', onDrop, true);
     return () => {
-      el.removeEventListener('dragover', onDragOver);
-      el.removeEventListener('drop', onDrop);
+      window.removeEventListener('dragover', onDragOver, true);
+      window.removeEventListener('drop', onDrop, true);
     };
   }, []);
 
