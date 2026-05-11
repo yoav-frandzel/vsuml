@@ -1,0 +1,334 @@
+/**
+ * Class Diagram webview entry point.
+ *
+ * Owns: render state, maxGraph instance, the renderer that bridges model
+ * data to maxGraph cells, and the dispatch loop that turns user gestures
+ * into messages back to the extension host.
+ */
+
+import { createRoot } from 'react-dom/client';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Graph, type FitPlugin } from '@maxgraph/core';
+import { onHostMessage, post, log } from '../vscode-api.js';
+import { requestMutation, resolveAck } from '../shared/rpc.js';
+import type {
+  ClassDiagramEdge,
+  ClassDiagramFile,
+  ClassDiagramNode,
+  ModelFile,
+  ValidationIssue
+} from '../../model/index.js';
+import {
+  ClassDiagramRenderer,
+  type ClassRendererCallbacks
+} from './renderer.js';
+import { Toolbar, type RelationshipKind } from './toolbar.js';
+
+interface AppState {
+  model: ModelFile | undefined;
+  diagram: ClassDiagramFile | undefined;
+  issues: ValidationIssue[];
+}
+
+const App: React.FC = () => {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<Graph | null>(null);
+  const rendererRef = useRef<ClassDiagramRenderer | null>(null);
+
+  const [state, setState] = useState<AppState>({
+    model: undefined,
+    diagram: undefined,
+    issues: []
+  });
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const [edgeKind, setEdgeKind] = useState<RelationshipKind>('Association');
+  const edgeKindRef = useRef(edgeKind);
+  edgeKindRef.current = edgeKind;
+
+  /** Updates the local diagram, persists it through the host, and re-renders. */
+  const updateDiagram = useCallback((next: ClassDiagramFile) => {
+    setState(prev => ({ ...prev, diagram: next }));
+    post({ type: 'view.updateDiagram', diagram: next });
+    if (rendererRef.current && stateRef.current.model) {
+      rendererRef.current.sync(stateRef.current.model, next);
+    }
+  }, []);
+
+  /** Callbacks the renderer invokes when the user interacts with the canvas. */
+  const callbacks: ClassRendererCallbacks = {
+    onNodesMoved: moved => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const ids = new Set(moved.map(m => m.id));
+      const nodes = cur.nodes.map(n => {
+        if (!ids.has(n.id)) return n;
+        const m = moved.find(x => x.id === n.id)!;
+        return { ...n, x: m.x, y: m.y };
+      });
+      updateDiagram({ ...cur, nodes });
+    },
+    onEdgeRequested: async ({ sourceNodeId, targetNodeId }) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const sourceNode = cur.nodes.find(n => n.id === sourceNodeId);
+      const targetNode = cur.nodes.find(n => n.id === targetNodeId);
+      if (!sourceNode || !targetNode) return;
+      const kind = edgeKindRef.current;
+      const result = await requestMutation<{ id: string }>({
+        kind: 'createRelationship',
+        relKind: kind,
+        sourceId: sourceNode.elementId,
+        targetId: targetNode.elementId
+      });
+      if (!result) return;
+      const newEdge: ClassDiagramEdge = {
+        id: makeId(),
+        elementId: result.id,
+        sourceNodeId,
+        targetNodeId
+      };
+      updateDiagram({ ...cur, edges: [...cur.edges, newEdge] });
+    },
+    onNodeActivated: viewNodeId => {
+      const cur = stateRef.current.diagram;
+      const model = stateRef.current.model;
+      if (!cur || !model) return;
+      const node = cur.nodes.find(n => n.id === viewNodeId);
+      if (!node) return;
+      const el = model.elements[node.elementId];
+      if (!el) return;
+      const name = window.prompt(`Rename ${el.kind}`, el.name);
+      if (name && name.trim() && name !== el.name) {
+        void requestMutation({
+          kind: 'renameElement',
+          id: el.id,
+          name: name.trim()
+        });
+      }
+    },
+    onNodeDeleted: viewNodeId => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const node = cur.nodes.find(n => n.id === viewNodeId);
+      if (!node) return;
+      const remove = window.confirm(
+        'Remove this view node from the diagram?\n\n' +
+          'OK = remove from diagram only (class stays in model).\n' +
+          'Cancel = keep.'
+      );
+      if (!remove) return;
+      const nextEdges = cur.edges.filter(
+        e => e.sourceNodeId !== viewNodeId && e.targetNodeId !== viewNodeId
+      );
+      updateDiagram({
+        ...cur,
+        nodes: cur.nodes.filter(n => n.id !== viewNodeId),
+        edges: nextEdges
+      });
+    },
+    onEdgeDeleted: viewEdgeId => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const edge = cur.edges.find(e => e.id === viewEdgeId);
+      if (!edge) return;
+      const removeModel = window.confirm(
+        'Also delete the underlying relationship from the model?\n' +
+          'OK = delete from both. Cancel = remove from this diagram only.'
+      );
+      if (removeModel) {
+        void requestMutation({ kind: 'deleteElement', id: edge.elementId });
+      }
+      updateDiagram({
+        ...cur,
+        edges: cur.edges.filter(e => e.id !== viewEdgeId)
+      });
+    }
+  };
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
+
+  // One-time graph init.
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const graph = new Graph(canvasRef.current);
+    graph.setPanning(true);
+    graph.setCellsEditable(false);
+    graph.setHtmlLabels(true);
+    graph.setConnectable(true);
+    graph.setAllowDanglingEdges(false);
+    graph.setMultigraph(true);
+    graph.setTooltips(true);
+    graphRef.current = graph;
+    const renderer = new ClassDiagramRenderer(graph, {
+      onNodesMoved: m => callbacksRef.current.onNodesMoved(m),
+      onEdgeRequested: m => callbacksRef.current.onEdgeRequested(m),
+      onNodeActivated: id => callbacksRef.current.onNodeActivated(id),
+      onNodeDeleted: id => callbacksRef.current.onNodeDeleted(id),
+      onEdgeDeleted: id => callbacksRef.current.onEdgeDeleted(id)
+    });
+    rendererRef.current = renderer;
+    return () => {
+      graph.destroy();
+      graphRef.current = null;
+      rendererRef.current = null;
+    };
+  }, []);
+
+  // Sync whenever model or diagram changes.
+  useEffect(() => {
+    if (rendererRef.current && state.model && state.diagram) {
+      rendererRef.current.sync(state.model, state.diagram);
+    }
+  }, [state.model, state.diagram]);
+
+  // Host message subscription.
+  useEffect(() => {
+    const off = onHostMessage(msg => {
+      switch (msg.type) {
+        case 'host.init':
+          if (msg.diagram.kind !== 'ClassDiagram') {
+            log('error', `unexpected kind ${msg.diagram.kind}`);
+            return;
+          }
+          setState({
+            model: msg.model,
+            diagram: msg.diagram as ClassDiagramFile,
+            issues: []
+          });
+          break;
+        case 'host.modelChanged':
+          setState(prev => ({ ...prev, model: msg.model }));
+          break;
+        case 'host.diagramChanged':
+          if (msg.diagram.kind === 'ClassDiagram') {
+            setState(prev => ({
+              ...prev,
+              diagram: msg.diagram as ClassDiagramFile
+            }));
+          }
+          break;
+        case 'host.validation':
+          setState(prev => ({ ...prev, issues: msg.issues }));
+          break;
+        case 'host.ack':
+          resolveAck(msg);
+          break;
+      }
+    });
+    post({ type: 'view.ready' });
+    return off;
+  }, []);
+
+  /* Toolbar handlers */
+
+  const addExistingClassToDiagram = useCallback((elementId: string) => {
+    const cur = stateRef.current.diagram;
+    if (!cur) return;
+    if (cur.nodes.some(n => n.elementId === elementId)) return;
+    const offset = cur.nodes.length * 30;
+    const node: ClassDiagramNode = {
+      id: makeId(),
+      elementId,
+      x: 60 + offset,
+      y: 60 + offset,
+      width: 200,
+      height: 120
+    };
+    updateDiagram({ ...cur, nodes: [...cur.nodes, node] });
+  }, [updateDiagram]);
+
+  const handleAddClass = useCallback(async () => {
+    const name = window.prompt('New class name', 'NewClass');
+    if (!name) return;
+    const model = stateRef.current.model;
+    if (!model) return;
+    const created = await requestMutation<{ id: string }>({
+      kind: 'createClass',
+      name: name.trim(),
+      ownerId: model.rootPackageId
+    });
+    if (!created) return;
+    addExistingClassToDiagram(created.id);
+  }, [addExistingClassToDiagram]);
+
+  const handleAddInterface = useCallback(async () => {
+    const name = window.prompt('New interface name', 'NewInterface');
+    if (!name) return;
+    const model = stateRef.current.model;
+    if (!model) return;
+    const created = await requestMutation<{ id: string }>({
+      kind: 'createInterface',
+      name: name.trim(),
+      ownerId: model.rootPackageId
+    });
+    if (!created) return;
+    addExistingClassToDiagram(created.id);
+  }, [addExistingClassToDiagram]);
+
+  const handleAddFromModel = useCallback(() => {
+    const model = stateRef.current.model;
+    if (!model) return;
+    const cur = stateRef.current.diagram;
+    if (!cur) return;
+    const alreadyOnDiagram = new Set(cur.nodes.map(n => n.elementId));
+    const candidates = Object.values(model.elements).filter(
+      e =>
+        (e.kind === 'Class' || e.kind === 'Interface') &&
+        !alreadyOnDiagram.has(e.id)
+    );
+    if (candidates.length === 0) {
+      window.alert('All model classifiers are already on this diagram.');
+      return;
+    }
+    const choice = window.prompt(
+      'Add which model classifier? Enter the name.\n\nAvailable:\n' +
+        candidates.map(c => `  • ${c.name} (${c.kind})`).join('\n'),
+      candidates[0].name
+    );
+    if (!choice) return;
+    const picked = candidates.find(c => c.name === choice.trim());
+    if (!picked) {
+      window.alert(`No classifier named "${choice}".`);
+      return;
+    }
+    addExistingClassToDiagram(picked.id);
+  }, [addExistingClassToDiagram]);
+
+  const handleZoomFit = useCallback(() => {
+    const g = graphRef.current;
+    if (!g) return;
+    const plugin = g.getPlugin<FitPlugin>('fit');
+    plugin?.fit({ margin: 24 });
+  }, []);
+
+  return (
+    <>
+      <Toolbar
+        diagram={state.diagram}
+        model={state.model}
+        issues={state.issues}
+        edgeKind={edgeKind}
+        onEdgeKindChange={setEdgeKind}
+        onAddClass={handleAddClass}
+        onAddInterface={handleAddInterface}
+        onAddModelClass={handleAddFromModel}
+        onZoomFit={handleZoomFit}
+      />
+      <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
+    </>
+  );
+};
+
+function makeId(): string {
+  return (
+    'v_' +
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6)
+  );
+}
+
+const container = document.getElementById('root');
+if (!container) throw new Error('Missing #root');
+createRoot(container).render(<App />);

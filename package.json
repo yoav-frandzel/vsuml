@@ -1,0 +1,226 @@
+{
+  "name": "vsuml",
+  "displayName": "VS UML Modeling",
+  "description": "UML class, sequence, and state diagram modeling with a shared workspace model.",
+  "version": "0.0.1",
+  "publisher": "vsuml",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCustomEditor:vsuml.classDiagram",
+    "onCustomEditor:vsuml.sequenceDiagram",
+    "onCustomEditor:vsuml.stateDiagram",
+    "onView:vsumlModelExplorer"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "vsuml.helloWorld",
+        "title": "VS UML: Hello (scaffold check)"
+      },
+      {
+        "command": "vsuml.newClassDiagram",
+        "title": "VS UML: New Class Diagram"
+      },
+      {
+        "command": "vsuml.newSequenceDiagram",
+        "title": "VS UML: New Sequence Diagram"
+      },
+      {
+        "command": "vsuml.newStateDiagram",
+        "title": "VS UML: New State Diagram"
+      },
+      {
+        "command": "vsuml.validateModel",
+        "title": "VS UML: Validate Model"
+      },
+      {
+        "command": "vsuml.exportDiagramMermaid",
+        "title": "VS UML: Export Diagram as Mermaid"
+      },
+      {
+        "command": "vsuml.explorer.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vsuml.explorer.addPackage",
+        "title": "Add Package",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "vsuml.explorer.addClass",
+        "title": "Add Class",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "vsuml.explorer.addInterface",
+        "title": "Add Interface",
+        "icon": "$(symbol-interface)"
+      },
+      {
+        "command": "vsuml.explorer.addAttribute",
+        "title": "Add Attribute"
+      },
+      {
+        "command": "vsuml.explorer.addOperation",
+        "title": "Add Operation"
+      },
+      {
+        "command": "vsuml.explorer.rename",
+        "title": "Rename"
+      },
+      {
+        "command": "vsuml.explorer.delete",
+        "title": "Delete"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "vsuml.explorer.addPackage",
+          "when": "view == vsumlModelExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "vsuml.explorer.addClass",
+          "when": "view == vsumlModelExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "vsuml.explorer.refresh",
+          "when": "view == vsumlModelExplorer",
+          "group": "navigation@9"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "vsuml.explorer.addPackage",
+          "when": "view == vsumlModelExplorer && viewItem == vsuml.Package",
+          "group": "1_new@1"
+        },
+        {
+          "command": "vsuml.explorer.addClass",
+          "when": "view == vsumlModelExplorer && viewItem == vsuml.Package",
+          "group": "1_new@2"
+        },
+        {
+          "command": "vsuml.explorer.addInterface",
+          "when": "view == vsumlModelExplorer && viewItem == vsuml.Package",
+          "group": "1_new@3"
+        },
+        {
+          "command": "vsuml.explorer.addAttribute",
+          "when": "view == vsumlModelExplorer && (viewItem == vsuml.Class || viewItem == vsuml.Interface)",
+          "group": "1_new@1"
+        },
+        {
+          "command": "vsuml.explorer.addOperation",
+          "when": "view == vsumlModelExplorer && (viewItem == vsuml.Class || viewItem == vsuml.Interface)",
+          "group": "1_new@2"
+        },
+        {
+          "command": "vsuml.explorer.rename",
+          "when": "view == vsumlModelExplorer",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "vsuml.explorer.delete",
+          "when": "view == vsumlModelExplorer",
+          "group": "2_edit@2"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "vsuml.classDiagram",
+        "displayName": "UML Class Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.umlclass"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "vsuml.sequenceDiagram",
+        "displayName": "UML Sequence Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.umlsequence"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "vsuml.stateDiagram",
+        "displayName": "UML State Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.umlstate"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vsuml",
+          "title": "VS UML",
+          "icon": "$(symbol-class)"
+        }
+      ]
+    },
+    "views": {
+      "vsuml": [
+        {
+          "id": "vsumlModelExplorer",
+          "name": "Model Explorer"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "json",
+        "extensions": [
+          ".umlclass",
+          ".umlsequence",
+          ".umlstate"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  },
+  "dependencies": {
+    "@maxgraph/core": "^0.23.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  }
+}
