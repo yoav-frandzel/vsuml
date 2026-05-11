@@ -118,6 +118,35 @@ const App: React.FC = () => {
         });
       }
     },
+    onEdgeActivated: async viewEdgeId => {
+      const cur = stateRef.current.diagram;
+      const model = stateRef.current.model;
+      if (!cur || !model) return;
+      const edge = cur.edges.find(e => e.id === viewEdgeId);
+      if (!edge) return;
+      const rel = model.elements[edge.elementId];
+      if (!rel || rel.kind !== 'Relationship') return;
+      const kinds: RelationshipKind[] = [
+        'Association',
+        'Generalization',
+        'Dependency',
+        'Realization'
+      ];
+      const picked = await showQuickPick(
+        kinds.map(k => ({
+          label: k,
+          description: k === rel.relKind ? '(current)' : '',
+          detail: k
+        })),
+        { placeHolder: 'Change edge type' }
+      );
+      if (!picked || !picked.detail || picked.detail === rel.relKind) return;
+      void requestMutation({
+        kind: 'updateElement',
+        id: rel.id,
+        patch: { relKind: picked.detail }
+      });
+    },
     onNodeDeleted: async viewNodeId => {
       const cur = stateRef.current.diagram;
       if (!cur) return;
@@ -174,6 +203,7 @@ const App: React.FC = () => {
       onNodesMoved: m => callbacksRef.current.onNodesMoved(m),
       onEdgeRequested: m => callbacksRef.current.onEdgeRequested(m),
       onNodeActivated: id => callbacksRef.current.onNodeActivated(id),
+      onEdgeActivated: id => callbacksRef.current.onEdgeActivated(id),
       onNodeDeleted: id => callbacksRef.current.onNodeDeleted(id),
       onEdgeDeleted: id => callbacksRef.current.onEdgeDeleted(id)
     });

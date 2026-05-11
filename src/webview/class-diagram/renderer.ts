@@ -47,6 +47,8 @@ export interface ClassRendererCallbacks {
   onEdgeRequested(req: { sourceNodeId: string; targetNodeId: string }): void;
   /** Double-click on a node — surfaces an edit intent to the host. */
   onNodeActivated(viewNodeId: string): void;
+  /** Double-click on an edge — surfaces an edit intent to the host. */
+  onEdgeActivated(viewEdgeId: string): void;
   /** A node was deleted via the keyboard (Delete key). */
   onNodeDeleted(viewNodeId: string): void;
   /** An edge was deleted via the keyboard. */
@@ -217,13 +219,16 @@ export class ClassDiagramRenderer {
       this.callbacks.onEdgeRequested({ sourceNodeId: sId, targetNodeId: tId });
     });
 
-    // Double click activates a node for property editing.
+    // Double click activates a node or edge for property editing.
     this.graph.addListener(InternalEvent.DOUBLE_CLICK, (_s: unknown, evt: EventObject) => {
       const cell = evt.getProperty('cell') as Cell | undefined;
       if (!cell) return;
       if (cell.isVertex()) {
         const id = idFromCell(cell, 'node');
         if (id) this.callbacks.onNodeActivated(id);
+      } else if (cell.isEdge()) {
+        const id = idFromCell(cell, 'edge');
+        if (id) this.callbacks.onEdgeActivated(id);
       }
     });
 
