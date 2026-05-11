@@ -27,12 +27,13 @@ import type {
 } from '../../model/index.js';
 
 const NODE_MIN_WIDTH = 160;
-const NODE_PADDING_V = 5;
+const NODE_PADDING_V = 6;
 const NODE_PADDING_H = 8;
 const NAME_LINE_H = 18;
 const STEREO_LINE_H = 14;
 const MEMBER_LINE_H = 16;
-const COMPARTMENT_GAP = 7;
+// Separator = 4px margin-top + 1px border + 4px margin-bottom.
+const SEPARATOR_H = 9;
 
 export interface ClassRendererCallbacks {
   /** Called when the user moves one or more nodes on the canvas. */
@@ -126,7 +127,7 @@ export class ClassDiagramRenderer {
       });
       this._vertexById.set(n.id, cell);
     } else {
-      cell.value = html;
+      this.graph.model.setValue(cell, html);
       const geo = cell.getGeometry();
       if (geo) {
         const updated = new Geometry(n.x, n.y, w, h);
@@ -305,14 +306,16 @@ function renderClassifierHtml(
   const ops = childrenOf(model, c.id).filter(e => e.kind === 'Operation');
 
   const stereoHtml = stereotype
-    ? `<div style="font-size:10px;opacity:0.75;line-height:1.25;text-align:center;">${escapeHtml(stereotype)}</div>`
+    ? `<div style="font-size:10px;line-height:${STEREO_LINE_H}px;opacity:0.75;text-align:center;">${escapeHtml(stereotype)}</div>`
     : '';
-  const nameHtml = `<div style="font-weight:600;${c.isAbstract ? 'font-style:italic;' : ''}text-align:center;line-height:1.3;">${escapeHtml(c.name)}</div>`;
+  const nameHtml = `<div style="font-weight:600;${c.isAbstract ? 'font-style:italic;' : ''}line-height:${NAME_LINE_H}px;text-align:center;">${escapeHtml(c.name)}</div>`;
 
-  const sep = `<div style="border-top:1px solid var(--vscode-foreground);opacity:0.35;margin:4px -${NODE_PADDING_H}px;"></div>`;
+  // height:0 + border-top + symmetric margins keeps the rendered height
+  // exactly SEPARATOR_H so it matches computeNodeHeight().
+  const sep = `<div style="height:0;border-top:1px solid var(--vscode-foreground);opacity:0.35;margin:4px -${NODE_PADDING_H}px;"></div>`;
 
   const lineStyle =
-    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35;';
+    `line-height:${MEMBER_LINE_H}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
 
   const attrLines = attrs
     .map(a => {
@@ -342,10 +345,8 @@ function renderClassifierHtml(
   const attrsSection = attrLines ? `${sep}${attrLines}` : '';
   const opsSection = opLines ? `${sep}${opLines}` : '';
 
-  return `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_V}px ${NODE_PADDING_H}px;font-family:var(--vscode-font-family);font-size:11px;line-height:1.35;">
-      <div>${stereoHtml}${nameHtml}</div>
-      ${attrsSection}
-      ${opsSection}
+  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_V}px ${NODE_PADDING_H}px;font-family:var(--vscode-font-family);font-size:11px;">
+      ${stereoHtml}${nameHtml}${attrsSection}${opsSection}
     </div>`;
 }
 
@@ -355,9 +356,9 @@ function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
   const attrs = childrenOf(model, c.id).filter(e => e.kind === 'Attribute').length;
   const ops = childrenOf(model, c.id).filter(e => e.kind === 'Operation').length;
   let h = NODE_PADDING_V * 2 + NAME_LINE_H + (hasStereotype ? STEREO_LINE_H : 0);
-  if (attrs > 0) h += COMPARTMENT_GAP + attrs * MEMBER_LINE_H;
-  if (ops > 0) h += COMPARTMENT_GAP + ops * MEMBER_LINE_H;
-  return Math.max(h, NAME_LINE_H + NODE_PADDING_V * 2 + 4);
+  if (attrs > 0) h += SEPARATOR_H + attrs * MEMBER_LINE_H;
+  if (ops > 0) h += SEPARATOR_H + ops * MEMBER_LINE_H;
+  return h;
 }
 
 function childrenOf(model: ModelFile, ownerId: string): ModelElement[] {
