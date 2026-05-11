@@ -59,6 +59,9 @@ export interface HostAckMessage {
 export interface HostAddElementMessage {
   type: 'host.addElement';
   elementId: string;
+  /** Optional graph-space coordinates (used by class diagrams). */
+  x?: number;
+  y?: number;
 }
 
 export type HostToView =
@@ -172,6 +175,17 @@ export interface ViewConfirmMessage {
   okLabel?: string;
 }
 
+/**
+ * Sent when the user drops something on the canvas. The webview signals
+ * the host to dispatch any pending drag (e.g. from the Model Explorer)
+ * to this diagram at the given graph-space coordinates.
+ */
+export interface ViewDroppedMessage {
+  type: 'view.dropped';
+  x?: number;
+  y?: number;
+}
+
 export type ViewToHost =
   | ViewReadyMessage
   | ViewUpdateDiagramMessage
@@ -180,4 +194,5 @@ export type ViewToHost =
   | ViewQuickPickMessage
   | ViewInputBoxMessage
   | ViewShowMessageMessage
-  | ViewConfirmMessage;
+  | ViewConfirmMessage
+  | ViewDroppedMessage;

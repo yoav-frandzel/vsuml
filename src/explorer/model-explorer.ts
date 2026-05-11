@@ -19,6 +19,7 @@ import type {
 } from '../model/index.js';
 import type { ModelService } from '../model/model-service.js';
 import { getActiveDiagram } from '../editors/active-registry.js';
+import { setPendingDrag } from './drag-state.js';
 
 export const VSUML_DRAG_MIME = 'application/vnd.vsuml.element-ids';
 
@@ -52,9 +53,11 @@ export class ModelExplorerProvider
       .map(n => n.element.id)
       .filter((s): s is string => !!s);
     if (ids.length === 0) return;
+    // Stash ids in the host; the webview will request them via 'view.dropped'.
+    // We also write to text/plain for any consumer (e.g. another tree, an
+    // editor) that can read DataTransfer the standard way.
+    setPendingDrag(ids);
     const payload = JSON.stringify({ kind: 'vsuml.elements', ids });
-    // Custom MIME for safety + text/plain so the webview drop target
-    // (HTML5 DataTransfer) can read it.
     dataTransfer.set(VSUML_DRAG_MIME, new vscode.DataTransferItem(payload));
     dataTransfer.set('text/plain', new vscode.DataTransferItem(payload));
   }

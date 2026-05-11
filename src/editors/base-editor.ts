@@ -24,6 +24,7 @@ import {
   clearIfMatches,
   setActiveDiagram
 } from './active-registry.js';
+import { consumePendingDrag } from '../explorer/drag-state.js';
 
 export interface DiagramEditorConfig {
   viewType: string;
@@ -182,6 +183,18 @@ export class BaseDiagramEditor implements vscode.CustomTextEditorProvider {
             else if (raw.level === 'warn') vscode.window.showWarningMessage(raw.message);
             else vscode.window.showInformationMessage(raw.message);
             break;
+          case 'view.dropped': {
+            const ids = consumePendingDrag();
+            for (const elementId of ids) {
+              post({
+                type: 'host.addElement',
+                elementId,
+                x: raw.x,
+                y: raw.y
+              });
+            }
+            break;
+          }
         }
       }
     );

@@ -222,54 +222,32 @@ const App: React.FC = () => {
   }, [state.model, state.diagram]);
 
   // Drag-and-drop from the Model Explorer.
-  // Using a ref because addExistingClassToDiagram is declared later in the
-  // component body.
-  const addRef = useRef<
-    (elementId: string, position?: { x: number; y: number }) => void
-  >(() => {});
+  // VS Code's TreeView DataTransfer payload doesn't cross the webview iframe
+  // boundary, so we just signal the host on drop; the host has the pending
+  // drag's element ids and replies with host.addElement.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
     const onDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer) return;
-      const types = Array.from(e.dataTransfer.types);
-      if (!types.includes('text/plain')) return;
+      // Accept any drag; the host decides whether anything is pending.
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     };
     const onDrop = (e: DragEvent) => {
-      const raw = e.dataTransfer?.getData('text/plain');
-      if (!raw) return;
-      let payload: { kind?: string; ids?: string[] } | undefined;
-      try {
-        payload = JSON.parse(raw) as { kind?: string; ids?: string[] };
-      } catch {
-        return;
-      }
-      if (payload?.kind !== 'vsuml.elements' || !Array.isArray(payload.ids)) return;
-      const model = stateRef.current.model;
-      if (!model) return;
       e.preventDefault();
       const g = graphRef.current;
-      let dropX = 60;
-      let dropY = 60;
+      let x: number | undefined;
+      let y: number | undefined;
       if (g) {
         const rect = el.getBoundingClientRect();
         const view = g.view;
         const scale = view.scale || 1;
         const tx = view.translate?.x ?? 0;
         const ty = view.translate?.y ?? 0;
-        dropX = (e.clientX - rect.left) / scale - tx;
-        dropY = (e.clientY - rect.top) / scale - ty;
+        x = (e.clientX - rect.left) / scale - tx;
+        y = (e.clientY - rect.top) / scale - ty;
       }
-      let offsetX = 0;
-      for (const id of payload.ids) {
-        const m = model.elements[id];
-        if (!m) continue;
-        if (m.kind !== 'Class' && m.kind !== 'Interface') continue;
-        addRef.current(id, { x: dropX + offsetX, y: dropY });
-        offsetX += 30;
-      }
+      post({ type: 'view.dropped', x, y });
     };
     el.addEventListener('dragover', onDragOver);
     el.addEventListener('drop', onDrop);
@@ -316,8 +294,8 @@ const App: React.FC = () => {
           const node: ClassDiagramNode = {
             id: makeId(),
             elementId: msg.elementId,
-            x: 60 + offset,
-            y: 60 + offset,
+            x: msg.x !== undefined ? msg.x : 60 + offset,
+            y: msg.y !== undefined ? msg.y : 60 + offset,
             width: 200,
             height: 120
           };
@@ -353,7 +331,6 @@ const App: React.FC = () => {
     },
     [updateDiagram]
   );
-  addRef.current = addExistingClassToDiagram;
 
   const handleAddClass = useCallback(async () => {
     const name = await showInputBox({
