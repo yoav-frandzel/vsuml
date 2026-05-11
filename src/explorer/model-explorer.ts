@@ -19,23 +19,14 @@ import type {
 } from '../model/index.js';
 import type { ModelService } from '../model/model-service.js';
 import { getActiveDiagram } from '../editors/active-registry.js';
-import { setPendingDrag } from './drag-state.js';
-
-export const VSUML_DRAG_MIME = 'application/vnd.vsuml.element-ids';
 
 export class ModelExplorerProvider
-  implements
-    vscode.TreeDataProvider<ModelTreeNode>,
-    vscode.TreeDragAndDropController<ModelTreeNode>,
-    vscode.Disposable
+  implements vscode.TreeDataProvider<ModelTreeNode>, vscode.Disposable
 {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<
     ModelTreeNode | undefined
   >();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  readonly dragMimeTypes = [VSUML_DRAG_MIME, 'text/plain'];
-  readonly dropMimeTypes: readonly string[] = [];
 
   private readonly _disposables: vscode.Disposable[] = [];
 
@@ -43,23 +34,6 @@ export class ModelExplorerProvider
     this._disposables.push(
       service.onDidChange(() => this._onDidChangeTreeData.fire(undefined))
     );
-  }
-
-  handleDrag(
-    source: readonly ModelTreeNode[],
-    dataTransfer: vscode.DataTransfer
-  ): void {
-    const ids = source
-      .map(n => n.element.id)
-      .filter((s): s is string => !!s);
-    if (ids.length === 0) return;
-    // Stash ids in the host; the webview will request them via 'view.dropped'.
-    // We also write to text/plain for any consumer (e.g. another tree, an
-    // editor) that can read DataTransfer the standard way.
-    setPendingDrag(ids);
-    const payload = JSON.stringify({ kind: 'vsuml.elements', ids });
-    dataTransfer.set(VSUML_DRAG_MIME, new vscode.DataTransferItem(payload));
-    dataTransfer.set('text/plain', new vscode.DataTransferItem(payload));
   }
 
   dispose(): void {
@@ -112,6 +86,13 @@ export class ModelExplorerProvider
     item.contextValue = `vsuml.${el.kind}`;
     item.iconPath = iconFor(el);
     item.tooltip = tooltipFor(el);
+    if (el.kind === 'Class' || el.kind === 'Interface') {
+      item.command = {
+        command: 'vsuml.explorer.addToActiveDiagram',
+        title: 'Add to active diagram',
+        arguments: [node]
+      };
+    }
     return item;
   }
 }

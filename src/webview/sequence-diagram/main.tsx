@@ -281,33 +281,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleDelete]);
 
-  // Drag-and-drop from the Model Explorer: signal the host, which posts
-  // host.addElement back with the pending drag's ids.
-  // Listen on window with capture so the SVG layer can't intercept.
-  const canvasRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const inCanvas = (t: EventTarget | null): boolean =>
-      t instanceof Node && el.contains(t);
-    const onDragOver = (e: DragEvent) => {
-      if (!inCanvas(e.target)) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!inCanvas(e.target)) return;
-      e.preventDefault();
-      post({ type: 'view.dropped' });
-    };
-    window.addEventListener('dragover', onDragOver, true);
-    window.addEventListener('drop', onDrop, true);
-    return () => {
-      window.removeEventListener('dragover', onDragOver, true);
-      window.removeEventListener('drop', onDrop, true);
-    };
-  }, []);
-
   return (
     <>
       <div className="vsuml-toolbar">
@@ -320,7 +293,7 @@ const App: React.FC = () => {
           {state.issues.length > 0 && ` · ⚠ ${state.issues.length} issue(s)`}
         </span>
       </div>
-      <div ref={canvasRef} className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
+      <div className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
         {state.diagram ? (
           <SequenceSvg
             model={state.model}
