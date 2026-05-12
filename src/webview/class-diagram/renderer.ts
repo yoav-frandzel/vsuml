@@ -303,18 +303,22 @@ export class ClassDiagramRenderer {
 
 function classifierStyle(c: Class | Interface): Record<string, unknown> {
   return {
+    // The HTML label owns the entire visual (background, border, rounded
+    // corners) so the colors resolve from CSS variables reliably; the
+    // SVG rect underneath is invisible.
     shape: 'rectangle',
-    rounded: 1,
-    arcSize: 14,
+    rounded: false,
     html: 1,
     whiteSpace: 'wrap',
-    fillColor: 'var(--vscode-editorWidget-background)',
-    strokeColor: 'var(--vscode-panel-border, var(--vscode-foreground))',
+    fillColor: 'none',
+    strokeColor: 'none',
     fontColor: 'var(--vscode-editor-foreground)',
     align: 'left',
     verticalAlign: 'top',
     spacing: 0,
-    strokeWidth: c.kind === 'Interface' ? 1.4 : 1.1
+    strokeWidth: 0,
+    // Keep the interface marker subtle.
+    fontStyle: c.kind === 'Interface' ? 0 : 0
   };
 }
 
@@ -399,7 +403,7 @@ function renderClassifierHtml(
   const attrsSection = attrLines ? `${sep}${attrLines}` : '';
   const opsSection = opLines ? `${sep}${opLines}` : '';
 
-  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
+  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-foreground);border-radius:8px;font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
 }
 
 function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
