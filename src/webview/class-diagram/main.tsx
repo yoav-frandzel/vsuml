@@ -30,6 +30,7 @@ import {
   type ClassRendererCallbacks
 } from './renderer.js';
 import { Toolbar, type RelationshipKind } from './toolbar.js';
+import { PopupMenu } from '../shared/popup-menu.js';
 
 interface AppState {
   model: ModelFile | undefined;
@@ -660,104 +661,6 @@ const EdgeKindIcon: React.FC<{ kind: RelationshipKind }> = ({ kind }) => {
       );
   }
 };
-
-type PopupMenuItem =
-  | {
-      label: string;
-      shortcut?: string;
-      icon?: React.ReactNode;
-      onClick: () => void;
-      separator?: false;
-    }
-  | { separator: true };
-
-const PopupMenu = React.forwardRef<
-  HTMLDivElement,
-  { x: number; y: number; items: PopupMenuItem[] }
->(function PopupMenu({ x, y, items }, ref) {
-  const hasIcons = items.some(it => 'icon' in it && it.icon);
-  return (
-    <div
-      ref={ref}
-      role="menu"
-      style={{
-        position: 'fixed',
-        left: x,
-        top: y,
-        zIndex: 1000,
-        background: 'var(--vscode-menu-background)',
-        color: 'var(--vscode-menu-foreground)',
-        border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        padding: '4px 0',
-        minWidth: 200,
-        fontFamily: 'var(--vscode-font-family)',
-        fontSize: 12
-      }}
-      onMouseDown={e => e.stopPropagation()}
-      onContextMenu={e => e.preventDefault()}
-    >
-      {items.map((it, i) =>
-        'separator' in it && it.separator ? (
-          <div
-            key={`sep-${i}`}
-            style={{
-              height: 1,
-              margin: '4px 0',
-              background: 'var(--vscode-menu-separatorBackground, rgba(255,255,255,0.1))'
-            }}
-          />
-        ) : (
-          <button
-            key={i}
-            role="menuitem"
-            onClick={it.onClick}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              padding: '4px 12px',
-              gap: 10,
-              background: 'transparent',
-              color: 'inherit',
-              border: 0,
-              textAlign: 'left',
-              cursor: 'pointer'
-            }}
-            onMouseOver={e => {
-              (e.currentTarget as HTMLElement).style.background =
-                'var(--vscode-menu-selectionBackground)';
-              (e.currentTarget as HTMLElement).style.color =
-                'var(--vscode-menu-selectionForeground)';
-            }}
-            onMouseOut={e => {
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-              (e.currentTarget as HTMLElement).style.color = 'inherit';
-            }}
-          >
-            {hasIcons && (
-              <span
-                style={{
-                  width: EDGE_ICON_W,
-                  height: EDGE_ICON_H,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  flex: '0 0 auto'
-                }}
-              >
-                {it.icon ?? null}
-              </span>
-            )}
-            <span style={{ flex: 1 }}>{it.label}</span>
-            {it.shortcut && (
-              <span style={{ opacity: 0.7, marginLeft: 16 }}>{it.shortcut}</span>
-            )}
-          </button>
-        )
-      )}
-    </div>
-  );
-});
 
 function edgeExistsBetween(
   diagram: ClassDiagramFile,

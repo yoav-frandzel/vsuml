@@ -10,16 +10,17 @@ import { createRoot } from 'react-dom/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { onHostMessage, post } from '../vscode-api.js';
 import {
-  confirm,
   requestMutation,
   resolveAck,
   showInputBox,
   showMessage,
   showQuickPick
 } from '../shared/rpc.js';
+import { PopupMenu, useDismissOnOutsideClick } from '../shared/popup-menu.js';
 import type {
   Lifeline,
   ModelFile,
+  Operation,
   SequenceDiagramFile,
   SequenceMessage,
   ValidationIssue
@@ -29,11 +30,11 @@ import {
   LIFELINE_HEADER_H,
   LIFELINE_HEADER_W,
   LIFELINE_TOP,
-  MESSAGE_ROW_H,
   layoutSequence,
   lifelineLabel,
   messageLabel,
-  sortMessages
+  sortMessages,
+  type SequenceLayout
 } from './layout.js';
 
 interface AppState {
@@ -145,114 +146,35 @@ const App: React.FC = () => {
     updateDiagram({ ...cur, lifelines: [...cur.lifelines, lifeline] });
   }, [updateDiagram]);
 
-  const handleAddMessage = useCallback(async () => {
-    const model = stateRef.current.model;
-    const cur = stateRef.current.diagram;
-    if (!model || !cur) return;
-    if (cur.lifelines.length < 1) {
-      showMessage('warn', 'Add at least one lifeline first.');
-      return;
-    }
-    const lifelineItems = cur.lifelines.map(l => ({
-      label: lifelineLabel(model, l),
-      lifelineId: l.id
-    }));
-    const src = await showQuickPick(lifelineItems, {
-      placeHolder: 'Source lifeline (caller)'
-    });
-    if (!src) return;
-    const tgt = await showQuickPick(lifelineItems, {
-      placeHolder: 'Target lifeline (callee)'
-    });
-    if (!tgt) return;
+  /**
+   * Create a sync message between two lifelines at a specific Y, leaving
+   * the operation unset. The user binds an operation by right-clicking the
+   * resulting message.
+   */
+  const createMessage = useCallback(
+    (sourceLifelineId: string, targetLifelineId: string, dropY: number) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const y = Math.max(FIRST_MESSAGE_Y, dropY);
+      const msg: SequenceMessage = {
+        id: makeId(),
+        sourceLifelineId,
+        targetLifelineId,
+        kind: 'sync',
+        y,
+        operationId: undefined,
+        label: undefined
+      };
+      updateDiagram({ ...cur, messages: [...cur.messages, msg] });
+    },
+    [updateDiagram]
+  );
 
-    const kindPick = await showQuickPick(
-      [
-        { label: 'sync', description: 'synchronous call (solid filled arrow)' },
-        { label: 'async', description: 'asynchronous call (open arrow)' },
-        { label: 'reply', description: 'return value (dashed)' },
-        { label: 'create', description: 'object creation' },
-        { label: 'destroy', description: 'object destruction' }
-      ],
-      { placeHolder: 'Message kind' }
-    );
-    if (!kindPick) return;
-    const kind = kindPick.label as SequenceMessage['kind'];
-
-    const target = cur.lifelines.find(l => l.id === tgt.lifelineId);
-    if (!target) return;
-    let operationId: string | undefined;
-    let label: string | undefined;
-
-    if (kind === 'sync' || kind === 'async') {
-      const targetClass = model.elements[target.representsId];
-      if (!targetClass) {
-        showMessage('error', "Target lifeline's classifier is missing.");
-        return;
-      }
-      const ops = Object.values(model.elements).filter(
-        e => e.kind === 'Operation' && e.ownerId === target.representsId
-      );
-      if (ops.length === 0) {
-        const create = await confirm(
-          `${targetClass.name} has no operations. Create one to invoke?`,
-          'Create operation'
-        );
-        if (!create) return;
-        const opName = await showInputBox({
-          prompt: 'Operation name',
-          value: 'doSomething'
-        });
-        if (!opName) return;
-        const created = await requestMutation<{ id: string }>({
-          kind: 'createOperation',
-          classifierId: target.representsId,
-          name: opName.trim()
-        });
-        if (!created) return;
-        operationId = created.id;
-      } else {
-        const opPick = await showQuickPick(
-          ops.map(o => ({ label: o.name, opId: o.id })),
-          { placeHolder: `Which operation on ${targetClass.name}?` }
-        );
-        if (!opPick) return;
-        operationId = opPick.opId;
-      }
-    } else {
-      label = await showInputBox({
-        prompt: 'Message label (optional)',
-        placeHolder: kind === 'reply' ? 'return value' : ''
-      });
-    }
-
-    const nextY =
-      cur.messages.length === 0
-        ? FIRST_MESSAGE_Y
-        : Math.max(...cur.messages.map(m => m.y)) + MESSAGE_ROW_H;
-
-    const msg: SequenceMessage = {
-      id: makeId(),
-      sourceLifelineId: src.lifelineId,
-      targetLifelineId: target.id,
-      kind,
-      y: nextY,
-      operationId,
-      label
-    };
-    updateDiagram({ ...cur, messages: [...cur.messages, msg] });
-  }, [updateDiagram]);
-
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!selected) return;
     const cur = stateRef.current.diagram;
     if (!cur) return;
     if (cur.lifelines.some(l => l.id === selected)) {
-      const remove = await confirm(
-        'Remove this lifeline and all its messages from the diagram?',
-        'Remove'
-      );
-      if (!remove) return;
       updateDiagram({
         ...cur,
         lifelines: cur.lifelines.filter(l => l.id !== selected),
@@ -275,21 +197,172 @@ const App: React.FC = () => {
   // Keyboard delete.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' || e.key === 'Backspace') handleDelete();
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable) return;
+      }
+      handleDelete();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [handleDelete]);
+
+  /* --- Message popup (right-click / double-click on a message) --- */
+
+  const [msgMenu, setMsgMenu] = useState<
+    { messageId: string; x: number; y: number } | undefined
+  >();
+  const msgMenuRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutsideClick(!!msgMenu, msgMenuRef, () => setMsgMenu(undefined));
+
+  const openMessageMenu = useCallback(
+    (messageId: string, clientX: number, clientY: number) => {
+      setMsgMenu({ messageId, x: clientX, y: clientY });
+    },
+    []
+  );
+
+  /* --- Message mutations from the popup --- */
+
+  const setMessageOperation = useCallback(
+    (messageId: string, operationId: string | undefined) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      updateDiagram({
+        ...cur,
+        messages: cur.messages.map(m =>
+          m.id === messageId ? { ...m, operationId } : m
+        )
+      });
+    },
+    [updateDiagram]
+  );
+
+  const setMessageKind = useCallback(
+    (messageId: string, kind: SequenceMessage['kind']) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      updateDiagram({
+        ...cur,
+        messages: cur.messages.map(m =>
+          m.id === messageId ? { ...m, kind } : m
+        )
+      });
+    },
+    [updateDiagram]
+  );
+
+  const editMessageLabel = useCallback(
+    async (messageId: string) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      const msg = cur.messages.find(m => m.id === messageId);
+      if (!msg) return;
+      const next = await showInputBox({
+        prompt: 'Message label',
+        value: msg.label ?? '',
+        placeHolder: msg.kind === 'reply' ? 'return value' : ''
+      });
+      if (next === undefined) return;
+      updateDiagram({
+        ...cur,
+        messages: cur.messages.map(m =>
+          m.id === messageId ? { ...m, label: next || undefined } : m
+        )
+      });
+    },
+    [updateDiagram]
+  );
+
+  const addOperationAndBind = useCallback(
+    async (messageId: string, classifierId: string) => {
+      const opName = await showInputBox({
+        prompt: 'Operation name',
+        value: 'doSomething'
+      });
+      if (!opName) return;
+      const created = await requestMutation<{ id: string }>({
+        kind: 'createOperation',
+        classifierId,
+        name: opName.trim()
+      });
+      if (!created) return;
+      setMessageOperation(messageId, created.id);
+    },
+    [setMessageOperation]
+  );
+
+  const deleteMessage = useCallback(
+    (messageId: string) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      updateDiagram({
+        ...cur,
+        messages: cur.messages.filter(m => m.id !== messageId)
+      });
+      if (selected === messageId) setSelected(undefined);
+    },
+    [selected, updateDiagram]
+  );
+
+  /* --- Popup items computed from the model + current message --- */
+
+  const msgMenuItems = (() => {
+    if (!msgMenu) return null;
+    const cur = state.diagram;
+    const model = state.model;
+    if (!cur || !model) return null;
+    const msg = cur.messages.find(m => m.id === msgMenu.messageId);
+    if (!msg) return null;
+    const targetLifeline = cur.lifelines.find(l => l.id === msg.targetLifelineId);
+    const targetClassifier = targetLifeline
+      ? model.elements[targetLifeline.representsId]
+      : undefined;
+    const ops: Operation[] = targetClassifier
+      ? (Object.values(model.elements).filter(
+          (e): e is Operation =>
+            e.kind === 'Operation' && e.ownerId === targetClassifier.id
+        ))
+      : [];
+
+    const opItems = ops.map(op => ({
+      label: `${op.name}()`,
+      checked: msg.operationId === op.id,
+      onClick: () => {
+        setMsgMenu(undefined);
+        setMessageOperation(msg.id, op.id);
+      }
+    }));
+
+    const kindItems = (
+      ['sync', 'async', 'reply', 'create', 'destroy'] as const
+    ).map(k => ({
+      label: k,
+      checked: msg.kind === k,
+      onClick: () => {
+        setMsgMenu(undefined);
+        setMessageKind(msg.id, k);
+      }
+    }));
+
+    return {
+      msg,
+      target: targetClassifier,
+      ops,
+      opItems,
+      kindItems
+    };
+  })();
 
   return (
     <>
       <div className="vsuml-toolbar">
         <strong>{state.diagram?.name ?? 'Sequence Diagram'}</strong>
         <button onClick={handleAddLifeline}>+ Lifeline</button>
-        <button onClick={handleAddMessage}>+ Message</button>
-        <button onClick={handleDelete} disabled={!selected}>Delete</button>
         <span className="vsuml-toolbar-info">
-          {state.diagram?.lifelines.length ?? 0} lifeline(s) · {state.diagram?.messages.length ?? 0} message(s)
+          Drag from one lifeline to another to add a message · {state.diagram?.lifelines.length ?? 0} lifeline(s) · {state.diagram?.messages.length ?? 0} message(s)
           {state.issues.length > 0 && ` · ⚠ ${state.issues.length} issue(s)`}
         </span>
       </div>
@@ -300,15 +373,95 @@ const App: React.FC = () => {
             diagram={state.diagram}
             selected={selected}
             onSelect={setSelected}
-            onReorder={(messages) => {
+            onReorder={messages => {
               const cur = stateRef.current.diagram;
               if (cur) updateDiagram({ ...cur, messages });
             }}
+            onCreateMessage={createMessage}
+            onMessageContextMenu={openMessageMenu}
           />
         ) : (
           'Loading…'
         )}
       </div>
+      {msgMenu && msgMenuItems && (
+        <PopupMenu
+          ref={msgMenuRef}
+          x={msgMenu.x}
+          y={msgMenu.y}
+          items={[
+            // Operation picker (only meaningful for sync/async)
+            ...((msgMenuItems.msg.kind === 'sync' || msgMenuItems.msg.kind === 'async')
+              ? [
+                  ...(msgMenuItems.opItems.length === 0
+                    ? [
+                        {
+                          label: msgMenuItems.target
+                            ? `(no operations on ${msgMenuItems.target.name})`
+                            : '(no target classifier)',
+                          onClick: () => setMsgMenu(undefined)
+                        }
+                      ]
+                    : msgMenuItems.opItems),
+                  ...(msgMenuItems.target
+                    ? [
+                        {
+                          label: 'Add operation…',
+                          onClick: () => {
+                            const id = msgMenu.messageId;
+                            const cid = msgMenuItems.target!.id;
+                            setMsgMenu(undefined);
+                            void addOperationAndBind(id, cid);
+                          }
+                        }
+                      ]
+                    : []),
+                  ...(msgMenuItems.msg.operationId
+                    ? [
+                        {
+                          label: '(clear operation)',
+                          onClick: () => {
+                            const id = msgMenu.messageId;
+                            setMsgMenu(undefined);
+                            setMessageOperation(id, undefined);
+                          }
+                        }
+                      ]
+                    : []),
+                  { separator: true } as const
+                ]
+              : []),
+            // Label editor for non-operation kinds
+            ...(msgMenuItems.msg.kind === 'reply' ||
+            msgMenuItems.msg.kind === 'create' ||
+            msgMenuItems.msg.kind === 'destroy'
+              ? [
+                  {
+                    label: 'Edit label…',
+                    onClick: () => {
+                      const id = msgMenu.messageId;
+                      setMsgMenu(undefined);
+                      void editMessageLabel(id);
+                    }
+                  },
+                  { separator: true } as const
+                ]
+              : []),
+            // Kind picker
+            ...msgMenuItems.kindItems,
+            { separator: true } as const,
+            {
+              label: 'Delete',
+              shortcut: 'Del',
+              onClick: () => {
+                const id = msgMenu.messageId;
+                setMsgMenu(undefined);
+                deleteMessage(id);
+              }
+            }
+          ]}
+        />
+      )}
     </>
   );
 };
@@ -323,6 +476,12 @@ interface SequenceSvgProps {
   selected: string | undefined;
   onSelect(id: string | undefined): void;
   onReorder(messages: SequenceMessage[]): void;
+  onCreateMessage(
+    sourceLifelineId: string,
+    targetLifelineId: string,
+    dropY: number
+  ): void;
+  onMessageContextMenu(messageId: string, clientX: number, clientY: number): void;
 }
 
 const SequenceSvg: React.FC<SequenceSvgProps> = ({
@@ -330,40 +489,117 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
   diagram,
   selected,
   onSelect,
-  onReorder
+  onReorder,
+  onCreateMessage,
+  onMessageContextMenu
 }) => {
   const layout = layoutSequence(diagram);
   const sorted = sortMessages(diagram.messages);
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  // Track dragging state for vertical message reorder.
+  // Mode 1: dragging an existing message vertically to reorder.
   const dragRef = useRef<{ id: string; startY: number; origY: number } | null>(null);
   const [dragY, setDragY] = useState<{ id: string; y: number } | null>(null);
 
+  // Mode 2: dragging from a lifeline to another lifeline to create a message.
+  const createRef = useRef<{
+    sourceLifelineId: string;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const [createCur, setCreateCur] = useState<{
+    sourceLifelineId: string;
+    startX: number;
+    startY: number;
+    curX: number;
+    curY: number;
+  } | null>(null);
+
+  // ---- Mode 1: message drag ----
   const onMouseDownMessage = (e: React.MouseEvent, m: SequenceMessage) => {
     e.stopPropagation();
     onSelect(m.id);
     dragRef.current = { id: m.id, startY: e.clientY, origY: m.y };
   };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    const dy = e.clientY - dragRef.current.startY;
-    setDragY({ id: dragRef.current.id, y: dragRef.current.origY + dy });
+
+  // ---- Mode 2: lifeline drag-to-create ----
+  const onMouseDownLifeline = (
+    e: React.MouseEvent,
+    lifelineId: string
+  ) => {
+    e.stopPropagation();
+    const pt = svgPointFromEvent(e, svgRef.current);
+    if (!pt) return;
+    createRef.current = {
+      sourceLifelineId: lifelineId,
+      startX: pt.x,
+      startY: pt.y
+    };
   };
-  const onMouseUp = () => {
-    if (!dragRef.current || !dragY) {
-      dragRef.current = null;
-      setDragY(null);
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (dragRef.current) {
+      const dy = e.clientY - dragRef.current.startY;
+      setDragY({ id: dragRef.current.id, y: dragRef.current.origY + dy });
       return;
     }
-    const id = dragRef.current.id;
-    const newY = Math.max(FIRST_MESSAGE_Y, dragY.y);
+    if (createRef.current) {
+      const pt = svgPointFromEvent(e, svgRef.current);
+      if (!pt) return;
+      const dx = pt.x - createRef.current.startX;
+      const dy = pt.y - createRef.current.startY;
+      if (createCur || Math.hypot(dx, dy) > 5) {
+        setCreateCur({
+          sourceLifelineId: createRef.current.sourceLifelineId,
+          startX: createRef.current.startX,
+          startY: createRef.current.startY,
+          curX: pt.x,
+          curY: pt.y
+        });
+      }
+    }
+  };
+
+  const onMouseUp = (e: React.MouseEvent) => {
+    if (dragRef.current && dragY) {
+      const id = dragRef.current.id;
+      const newY = Math.max(FIRST_MESSAGE_Y, dragY.y);
+      dragRef.current = null;
+      setDragY(null);
+      onReorder(diagram.messages.map(m => (m.id === id ? { ...m, y: newY } : m)));
+      return;
+    }
     dragRef.current = null;
     setDragY(null);
-    onReorder(diagram.messages.map(m => (m.id === id ? { ...m, y: newY } : m)));
+
+    if (createRef.current) {
+      const c = createRef.current;
+      const cur = createCur;
+      createRef.current = null;
+      setCreateCur(null);
+      if (cur) {
+        // It was an actual drag; figure out where we ended.
+        const pt = svgPointFromEvent(e, svgRef.current) ?? {
+          x: cur.curX,
+          y: cur.curY
+        };
+        const targetLifelineId = lifelineAtX(pt.x, diagram, layout);
+        if (targetLifelineId) {
+          // Place the message at the y where the drag started (so users can
+          // insert between existing messages by starting the drag at that
+          // vertical position).
+          onCreateMessage(c.sourceLifelineId, targetLifelineId, c.startY);
+        }
+      } else {
+        // Click without significant move on the lifeline -> select it.
+        onSelect(c.sourceLifelineId);
+      }
+    }
   };
 
   return (
     <svg
+      ref={svgRef}
       width={layout.totalWidth}
       height={layout.totalHeight}
       onMouseMove={onMouseMove}
@@ -389,7 +625,11 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
         const cx = layout.lifelineX.get(l.id) ?? 0;
         const isSelected = selected === l.id;
         return (
-          <g key={l.id} onClick={e => { e.stopPropagation(); onSelect(l.id); }}>
+          <g
+            key={l.id}
+            onMouseDown={e => onMouseDownLifeline(e, l.id)}
+            style={{ cursor: 'crosshair' }}
+          >
             <rect
               x={cx - LIFELINE_HEADER_W / 2}
               y={LIFELINE_TOP}
@@ -399,7 +639,6 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
               fill="var(--vscode-editorWidget-background)"
               stroke={isSelected ? 'var(--vscode-focusBorder)' : 'var(--vscode-foreground)'}
               strokeWidth={isSelected ? 2 : 1}
-              style={{ cursor: 'pointer' }}
             />
             <text
               x={cx}
@@ -408,9 +647,19 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
               fill="var(--vscode-editor-foreground)"
               fontSize={12}
               fontFamily="var(--vscode-font-family)"
+              style={{ pointerEvents: 'none' }}
             >
               {lifelineLabel(model, l)}
             </text>
+            {/* Wide invisible stem hit area so dragging from anywhere along
+                the lifeline starts a message-create gesture. */}
+            <rect
+              x={cx - 10}
+              y={LIFELINE_TOP + LIFELINE_HEADER_H}
+              width={20}
+              height={Math.max(20, layout.stemBottom - (LIFELINE_TOP + LIFELINE_HEADER_H))}
+              fill="transparent"
+            />
             <line
               x1={cx}
               y1={LIFELINE_TOP + LIFELINE_HEADER_H}
@@ -419,10 +668,25 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
               stroke="var(--vscode-foreground)"
               strokeDasharray="4 4"
               opacity={0.5}
+              style={{ pointerEvents: 'none' }}
             />
           </g>
         );
       })}
+
+      {/* Rubber-band line during message creation */}
+      {createCur && (
+        <line
+          x1={layout.lifelineX.get(createCur.sourceLifelineId) ?? createCur.startX}
+          y1={createCur.startY}
+          x2={createCur.curX}
+          y2={createCur.curY}
+          stroke="var(--vscode-focusBorder, #4da6ff)"
+          strokeDasharray="3 3"
+          markerEnd="url(#sm-open)"
+          pointerEvents="none"
+        />
+      )}
 
       {/* Messages */}
       {sorted.map(m => {
@@ -437,6 +701,17 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
         const isDashed = m.kind === 'reply';
         const marker = m.kind === 'sync' ? 'sm-sync' : 'sm-open';
         const label = messageLabel(model, m);
+        const onContextMenu = (e: React.MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSelect(m.id);
+          onMessageContextMenu(m.id, e.clientX, e.clientY);
+        };
+        const onDoubleClick = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          onSelect(m.id);
+          onMessageContextMenu(m.id, e.clientX, e.clientY);
+        };
         if (isSelfMessage) {
           const x = fromX;
           const w = 40;
@@ -445,6 +720,8 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
               key={m.id}
               style={{ cursor: 'grab', color: colour }}
               onMouseDown={e => onMouseDownMessage(e, m)}
+              onContextMenu={onContextMenu}
+              onDoubleClick={onDoubleClick}
             >
               <path
                 d={`M ${x} ${y} L ${x + w} ${y} L ${x + w} ${y + 18} L ${x + 4} ${y + 18}`}
@@ -464,7 +741,18 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
             key={m.id}
             style={{ cursor: 'grab', color: colour }}
             onMouseDown={e => onMouseDownMessage(e, m)}
+            onContextMenu={onContextMenu}
+            onDoubleClick={onDoubleClick}
           >
+            {/* Wider hit area for easier picking */}
+            <line
+              x1={fromX}
+              y1={y}
+              x2={toX}
+              y2={y}
+              stroke="transparent"
+              strokeWidth={12}
+            />
             <line
               x1={fromX}
               y1={y}
@@ -482,6 +770,7 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
               fill={colour}
               fontSize={11}
               fontFamily="var(--vscode-font-family)"
+              style={{ pointerEvents: 'none' }}
             >
               {label}
             </text>
@@ -494,6 +783,34 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
 
 /* ------------------------------------------------------------------ */
 
+function svgPointFromEvent(
+  e: { clientX: number; clientY: number },
+  svg: SVGSVGElement | null
+): { x: number; y: number } | undefined {
+  if (!svg) return undefined;
+  const rect = svg.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function lifelineAtX(
+  x: number,
+  diagram: SequenceDiagramFile,
+  layout: SequenceLayout
+): string | undefined {
+  // Pick the lifeline whose column center is closest to x, within a
+  // tolerance of half the column pitch.
+  let best: { id: string; dist: number } | undefined;
+  for (const l of diagram.lifelines) {
+    const cx = layout.lifelineX.get(l.id);
+    if (cx === undefined) continue;
+    const dist = Math.abs(cx - x);
+    if (!best || dist < best.dist) best = { id: l.id, dist };
+  }
+  if (!best) return undefined;
+  // Accept hits within LIFELINE_HEADER_W on either side of the column.
+  return best.dist <= LIFELINE_HEADER_W ? best.id : undefined;
+}
+
 function makeId(): string {
   return (
     'v_' +
@@ -502,8 +819,6 @@ function makeId(): string {
   );
 }
 
-// Awaitable wrapper kept simple — sequence diagrams currently only call
-// `requestMutation` directly; remove this stub if you don't extend.
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root');
 createRoot(container).render(<App />);
