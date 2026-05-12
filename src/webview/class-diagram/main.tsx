@@ -417,12 +417,35 @@ const App: React.FC = () => {
     addExistingClassToDiagram(picked.elementId);
   }, [addExistingClassToDiagram]);
 
-  const handleZoomFit = useCallback(() => {
+  const preFitViewRef = useRef<{ scale: number; tx: number; ty: number } | undefined>(
+    undefined
+  );
+  const [fitActive, setFitActive] = useState(false);
+
+  const handleToggleFit = useCallback(() => {
     const g = graphRef.current;
     if (!g) return;
-    const plugin = g.getPlugin<FitPlugin>('fit');
-    plugin?.fit({ margin: 24 });
-  }, []);
+    if (!fitActive) {
+      // Snapshot the current view, then fit.
+      const view = g.view;
+      preFitViewRef.current = {
+        scale: view.scale,
+        tx: view.translate?.x ?? 0,
+        ty: view.translate?.y ?? 0
+      };
+      const plugin = g.getPlugin<FitPlugin>('fit');
+      plugin?.fit({ margin: 24 });
+      setFitActive(true);
+    } else {
+      // Restore the snapshot.
+      const snap = preFitViewRef.current;
+      if (snap) {
+        g.view.scaleAndTranslate(snap.scale, snap.tx, snap.ty);
+      }
+      preFitViewRef.current = undefined;
+      setFitActive(false);
+    }
+  }, [fitActive]);
 
   const nodeMenuRef = useRef<HTMLDivElement>(null);
   const edgeMenuRef = useRef<HTMLDivElement>(null);
@@ -508,7 +531,8 @@ const App: React.FC = () => {
         onAddClass={handleAddClass}
         onAddInterface={handleAddInterface}
         onAddModelClass={handleAddFromModel}
-        onZoomFit={handleZoomFit}
+        fitActive={fitActive}
+        onToggleFit={handleToggleFit}
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
       {nodeMenu && (

@@ -18,7 +18,8 @@ interface ToolbarProps {
   onAddClass(): void;
   onAddInterface(): void;
   onAddModelClass(): void;
-  onZoomFit(): void;
+  fitActive: boolean;
+  onToggleFit(): void;
 }
 
 /**
@@ -34,7 +35,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddClass,
   onAddInterface,
   onAddModelClass,
-  onZoomFit
+  fitActive,
+  onToggleFit
 }) => {
   const elementCount = model ? Object.keys(model.elements).length : 0;
   const issueLabel = issues.length === 0 ? '' : ` · ⚠ ${issues.length}`;
@@ -50,7 +52,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button onClick={onAddModelClass} title="Add an existing model class to this diagram">
         Add From Model…
       </button>
-      <button onClick={onZoomFit}>Fit</button>
+      <button
+        onClick={onToggleFit}
+        title={fitActive ? 'Restore the previous view' : 'Zoom to fit all nodes'}
+      >
+        {fitActive ? 'Reset View' : 'Fit'}
+      </button>
       <span className="vsuml-toolbar-info">
         {elementCount} model element(s) · {diagram?.nodes.length ?? 0} node(s) · {diagram?.edges.length ?? 0} edge(s){issueLabel}
       </span>
