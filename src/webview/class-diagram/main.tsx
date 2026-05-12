@@ -438,26 +438,13 @@ const App: React.FC = () => {
     );
     if (!target) return;
 
-    const kinds: RelationshipKind[] = [
-      'Association',
-      'Aggregation',
-      'Generalization',
-      'Dependency'
-    ];
-    const kindPick = await showQuickPick(
-      kinds.map(k => ({ label: k })),
-      { placeHolder: 'Relationship kind' }
-    );
-    if (!kindPick) return;
-    const relKind = kinds.find(k => k === kindPick.label);
-    if (!relKind) return;
-
     const sourceNode = cur.nodes.find(n => n.id === source.nodeId);
     const targetNode = cur.nodes.find(n => n.id === target.nodeId);
     if (!sourceNode || !targetNode) return;
+    // New edges default to Association; right-click the edge to retype.
     const result = await requestMutation<{ id: string }>({
       kind: 'createRelationship',
-      relKind,
+      relKind: 'Association',
       sourceId: sourceNode.elementId,
       targetId: targetNode.elementId
     });
