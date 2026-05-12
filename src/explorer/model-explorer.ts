@@ -122,6 +122,11 @@ function childElements(
 ): ModelElement[] {
   return Object.values(elements)
     .filter(e => e.ownerId === ownerId)
+    // Relationships live in the model at the package level but conceptually
+    // belong to the diagram edges that visualise them. Surfacing them as
+    // standalone tree items is noise -- users would just see one
+    // "Generalization: (unnamed)" per arrow drawn.
+    .filter(e => e.kind !== 'Relationship')
     .sort(compareElements);
 }
 
