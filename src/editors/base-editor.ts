@@ -368,6 +368,9 @@ export class BaseDiagramEditor implements vscode.CustomTextEditorProvider {
           await this.service.upsert({ ...el, ...msg.mutation.patch });
           break;
         }
+        case 'restoreElement':
+          await this.service.upsert(msg.mutation.element);
+          break;
       }
       post({
         type: 'host.ack',

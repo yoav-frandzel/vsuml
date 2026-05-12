@@ -11,7 +11,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Graph, SelectionHandler, type FitPlugin } from '@maxgraph/core';
 import { onHostMessage, post, log } from '../vscode-api.js';
 import {
-  confirm,
   requestMutation,
   resolveAck,
   showInputBox,
@@ -22,6 +21,7 @@ import type {
   ClassDiagramEdge,
   ClassDiagramFile,
   ClassDiagramNode,
+  ModelElement,
   ModelFile,
   ValidationIssue
 } from '../../model/index.js';
@@ -60,6 +60,29 @@ const App: React.FC = () => {
   const [edgeMenu, setEdgeMenu] = useState<
     { viewEdgeId: string; x: number; y: number } | undefined
   >();
+
+  /**
+   * In-memory undo stack scoped to this editor session. Each entry captures
+   * enough state to reverse a destructive op:
+   *   - the prior diagram snapshot (restored verbatim)
+   *   - the model elements that were removed (re-inserted via restoreElement
+   *     so they keep their original UUIDs and existing diagram edge
+   *     references stay valid).
+   * The stack is reset on host.init.
+   */
+  type UndoEntry = {
+    diagram: ClassDiagramFile;
+    removedElements: ModelElement[];
+  };
+  const undoStackRef = useRef<UndoEntry[]>([]);
+  const UNDO_LIMIT = 100;
+
+  const pushUndo = useCallback((entry: UndoEntry) => {
+    undoStackRef.current.push(entry);
+    if (undoStackRef.current.length > UNDO_LIMIT) {
+      undoStackRef.current.shift();
+    }
+  }, []);
 
   /** Updates the local diagram, persists it through the host, and re-renders. */
   const updateDiagram = useCallback((next: ClassDiagramFile) => {
@@ -154,23 +177,19 @@ const App: React.FC = () => {
         patch: { relKind: nextKind }
       });
     },
-    onNodeDeleted: async viewNodeId => {
+    onNodeDeleted: viewNodeId => {
       const cur = stateRef.current.diagram;
-      if (!cur) return;
+      const model = stateRef.current.model;
+      if (!cur || !model) return;
       const node = cur.nodes.find(n => n.id === viewNodeId);
       if (!node) return;
       const incident = cur.edges.filter(
         e => e.sourceNodeId === viewNodeId || e.targetNodeId === viewNodeId
       );
-      const detail =
-        incident.length === 0
-          ? 'The class stays in the model.'
-          : `The class stays in the model. ${incident.length} relationship(s) attached to it will be deleted from the model.`;
-      const remove = await confirm(
-        `Remove this view node from the diagram? ${detail}`,
-        'Remove'
-      );
-      if (!remove) return;
+      const removedElements = incident
+        .map(e => model.elements[e.elementId])
+        .filter((x): x is ModelElement => !!x);
+      pushUndo({ diagram: cur, removedElements });
       for (const e of incident) {
         void requestMutation({ kind: 'deleteElement', id: e.elementId });
       }
@@ -188,16 +207,17 @@ const App: React.FC = () => {
     onEdgeContextMenu: (viewEdgeId, x, y) => {
       setEdgeMenu({ viewEdgeId, x, y });
     },
-    onEdgeDeleted: async viewEdgeId => {
+    onEdgeDeleted: viewEdgeId => {
       const cur = stateRef.current.diagram;
-      if (!cur) return;
+      const model = stateRef.current.model;
+      if (!cur || !model) return;
       const edge = cur.edges.find(e => e.id === viewEdgeId);
       if (!edge) return;
-      const remove = await confirm(
-        'Delete this relationship (from the diagram and the model)?',
-        'Delete'
-      );
-      if (!remove) return;
+      const rel = model.elements[edge.elementId];
+      pushUndo({
+        diagram: cur,
+        removedElements: rel ? [rel] : []
+      });
       void requestMutation({ kind: 'deleteElement', id: edge.elementId });
       updateDiagram({
         ...cur,
@@ -265,6 +285,7 @@ const App: React.FC = () => {
             log('error', `unexpected kind ${msg.diagram.kind}`);
             return;
           }
+          undoStackRef.current = [];
           setState({
             model: msg.model,
             diagram: msg.diagram as ClassDiagramFile,
@@ -487,6 +508,29 @@ const App: React.FC = () => {
       window.removeEventListener('keydown', onKey);
     };
   }, [nodeMenu, edgeMenu]);
+
+  // Ctrl+Z / Cmd+Z: undo the last destructive action.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isUndo =
+        (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z';
+      if (!isUndo) return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable) return;
+      }
+      const entry = undoStackRef.current.pop();
+      if (!entry) return;
+      e.preventDefault();
+      for (const el of entry.removedElements) {
+        void requestMutation({ kind: 'restoreElement', element: el });
+      }
+      updateDiagram(entry.diagram);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [updateDiagram]);
 
   const edgeMenuRel = (() => {
     if (!edgeMenu) return undefined;

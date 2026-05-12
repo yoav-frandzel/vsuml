@@ -9,7 +9,7 @@
  * specific payloads are carried inside `payload`.
  */
 
-import type { DiagramFile, ModelFile, ValidationIssue } from '../model/index.js';
+import type { DiagramFile, ModelElement, ModelFile, ValidationIssue } from '../model/index.js';
 
 export type ViewKind = 'class' | 'sequence' | 'state';
 
@@ -137,7 +137,8 @@ export type ModelMutationRequest =
     }
   | { kind: 'renameElement'; id: string; name: string }
   | { kind: 'deleteElement'; id: string }
-  | { kind: 'updateElement'; id: string; patch: Record<string, unknown> };
+  | { kind: 'updateElement'; id: string; patch: Record<string, unknown> }
+  | { kind: 'restoreElement'; element: ModelElement };
 
 export interface ViewLogMessage {
   type: 'view.log';
