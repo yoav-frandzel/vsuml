@@ -116,7 +116,7 @@ export type ModelMutationRequest =
     }
   | {
       kind: 'createRelationship';
-      relKind: 'Association' | 'Generalization' | 'Dependency';
+      relKind: 'Association' | 'Aggregation' | 'Generalization' | 'Dependency';
       sourceId: string;
       targetId: string;
     }

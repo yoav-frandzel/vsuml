@@ -7,6 +7,7 @@ import type {
 
 export type RelationshipKind =
   | 'Association'
+  | 'Aggregation'
   | 'Generalization'
   | 'Dependency';
 
@@ -64,6 +65,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           onChange={e => onEdgeKindChange(e.target.value as RelationshipKind)}
         >
           <option value="Association">Association</option>
+          <option value="Aggregation">Aggregation</option>
           <option value="Generalization">Generalization</option>
           <option value="Dependency">Dependency</option>
         </select>

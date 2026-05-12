@@ -291,20 +291,23 @@ function classifierStyle(c: Class | Interface): Record<string, unknown> {
 }
 
 function edgeStyle(
-  kind: 'Association' | 'Generalization' | 'Dependency'
+  kind: 'Association' | 'Aggregation' | 'Generalization' | 'Dependency'
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
     strokeColor: 'var(--vscode-foreground)',
     fontColor: 'var(--vscode-editor-foreground)',
     rounded: false,
     endSize: 10,
-    startSize: 10
+    startSize: 12
   };
   switch (kind) {
     case 'Generalization':
       return { ...base, endArrow: 'block', endFill: 0 };
     case 'Dependency':
       return { ...base, endArrow: 'open', dashed: 1 };
+    case 'Aggregation':
+      // Hollow diamond at the source end (the "whole"); no arrow at the part end.
+      return { ...base, startArrow: 'diamond', startFill: 0, endArrow: 'none' };
     case 'Association':
     default:
       return { ...base, endArrow: 'open' };

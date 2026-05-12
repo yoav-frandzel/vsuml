@@ -17,11 +17,13 @@ not as a code transformation. Keep these invariants intact.
   the model.
 - **Three diagram kinds, no more:** Class, Sequence, State. State diagrams
   are owned by a single `StateMachine` (which is owned by a `Class`).
-- **Relationship kinds** for class diagrams: `Association`, `Generalization`,
-  `Dependency`. (Realization was intentionally removed.) Source of truth is
-  the `RelationshipKind` union in `src/model/types.ts`; the toolbar dropdown,
-  the renderer edge styles, and the Mermaid exporter must all stay in sync
-  with that union.
+- **Relationship kinds** for class diagrams: `Association`, `Aggregation`,
+  `Generalization`, `Dependency`. (Realization was intentionally removed.)
+  Source of truth is the `RelationshipKind` union in `src/model/types.ts`;
+  the toolbar dropdown, the renderer edge styles, and the Mermaid exporter
+  must all stay in sync with that union. Aggregation uses the convention
+  **source = whole, target = part**: the renderer draws a hollow diamond at
+  the source end.
 - **The Model Explorer** (`src/explorer/model-explorer.ts`) is the canonical
   list of model elements. Diagrams and the explorer subscribe to
   `ModelService.onDidChange`.

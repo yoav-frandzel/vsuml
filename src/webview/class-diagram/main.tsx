@@ -132,6 +132,7 @@ const App: React.FC = () => {
       if (!rel || rel.kind !== 'Relationship') return;
       const kinds: RelationshipKind[] = [
         'Association',
+        'Aggregation',
         'Generalization',
         'Dependency'
       ];

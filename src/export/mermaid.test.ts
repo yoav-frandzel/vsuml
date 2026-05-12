@@ -38,7 +38,8 @@ describe('diagramToMermaid (class)', () => {
     const attr = createAttribute('total', ord.id, 'number', 'private');
     const rel = createRelationship('Association', cust.id, ord.id, rootId);
     const generalization = createRelationship('Generalization', ord.id, iface.id, rootId);
-    for (const e of [cust, ord, iface, op, attr, rel, generalization]) {
+    const aggregation = createRelationship('Aggregation', ord.id, cust.id, rootId);
+    for (const e of [cust, ord, iface, op, attr, rel, generalization, aggregation]) {
       model.elements[e.id] = e;
     }
     const diagram: ClassDiagramFile = {
@@ -52,7 +53,8 @@ describe('diagramToMermaid (class)', () => {
       ],
       edges: [
         { id: 'e1', elementId: rel.id, sourceNodeId: 'n1', targetNodeId: 'n2' },
-        { id: 'e2', elementId: generalization.id, sourceNodeId: 'n2', targetNodeId: 'n3' }
+        { id: 'e2', elementId: generalization.id, sourceNodeId: 'n2', targetNodeId: 'n3' },
+        { id: 'e3', elementId: aggregation.id, sourceNodeId: 'n2', targetNodeId: 'n1' }
       ]
     };
     const out = diagramToMermaid(model, diagram);
@@ -64,6 +66,10 @@ describe('diagramToMermaid (class)', () => {
     expect(out).toContain('-total');
     expect(out).toContain('Order --> Customer');
     expect(out).toContain('Identifiable <|-- Order');
+    // Aggregation: hollow diamond at the source (whole) end. With the
+    // existing template "<target> <arrow> <source>", we use --o so the
+    // diamond appears on the right (source) side.
+    expect(out).toContain('Customer --o Order');
   });
 });
 

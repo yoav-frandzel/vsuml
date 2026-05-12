@@ -91,7 +91,9 @@ function classDiagramToMermaid(
         ? '<|--'
         : rel.relKind === 'Dependency'
           ? '..>'
-          : '-->';
+          : rel.relKind === 'Aggregation'
+            ? '--o'
+            : '-->';
     lines.push(`  ${b} ${arrow} ${a}`);
   }
   return lines.join('\n') + '\n';

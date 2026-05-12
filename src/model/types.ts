@@ -89,6 +89,7 @@ export interface Operation extends ModelElementBase {
 
 export type RelationshipKind =
   | 'Association'
+  | 'Aggregation'
   | 'Generalization'
   | 'Dependency';
 
