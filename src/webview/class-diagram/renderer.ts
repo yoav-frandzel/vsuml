@@ -403,7 +403,7 @@ function renderClassifierHtml(
   const attrsSection = attrLines ? `${sep}${attrLines}` : '';
   const opsSection = opLines ? `${sep}${opLines}` : '';
 
-  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-foreground);border-radius:8px;font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
+  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-foreground);font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
 }
 
 function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
