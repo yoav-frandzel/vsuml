@@ -302,23 +302,25 @@ export class ClassDiagramRenderer {
 /* ------------------------------------------------------------------ */
 
 function classifierStyle(c: Class | Interface): Record<string, unknown> {
+  // Visible appearance lives on the SVG cell shape so edge perimeter
+  // calculations (which use the cell's geometry rectangle) align with what
+  // the user sees. maxGraph applies fillColor / strokeColor via
+  // setAttribute('fill', value.toLowerCase()) so CSS variables don't
+  // resolve there -- use literal colors tuned for the VS Code dark theme
+  // (the predominant case); they degrade reasonably under light themes.
   return {
-    // The HTML label owns the entire visual (background, border, rounded
-    // corners) so the colors resolve from CSS variables reliably; the
-    // SVG rect underneath is invisible.
     shape: 'rectangle',
-    rounded: false,
+    rounded: 1,
+    arcSize: 8,
     html: 1,
     whiteSpace: 'wrap',
-    fillColor: 'none',
-    strokeColor: 'none',
+    fillColor: '#2d2d30',
+    strokeColor: '#888888',
     fontColor: 'var(--vscode-editor-foreground)',
     align: 'left',
     verticalAlign: 'top',
     spacing: 0,
-    strokeWidth: 0,
-    // Keep the interface marker subtle.
-    fontStyle: c.kind === 'Interface' ? 0 : 0
+    strokeWidth: c.kind === 'Interface' ? 1.4 : 1.1
   };
 }
 
@@ -403,7 +405,7 @@ function renderClassifierHtml(
   const attrsSection = attrLines ? `${sep}${attrLines}` : '';
   const opsSection = opLines ? `${sep}${opLines}` : '';
 
-  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-foreground);font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
+  return `<div style="height:100%;width:100%;overflow:hidden;box-sizing:border-box;padding:${NODE_PADDING_TOP}px ${NODE_PADDING_H}px ${NODE_PADDING_BOTTOM}px;font-family:var(--vscode-font-family);font-size:11px;">${stereoHtml}${nameHtml}${attrsSection}${opsSection}</div>`;
 }
 
 function computeNodeHeight(model: ModelFile, c: Class | Interface): number {
