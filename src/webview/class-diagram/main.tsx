@@ -50,10 +50,6 @@ const App: React.FC = () => {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const [edgeKind, setEdgeKind] = useState<RelationshipKind>('Association');
-  const edgeKindRef = useRef(edgeKind);
-  edgeKindRef.current = edgeKind;
-
   const [nodeMenu, setNodeMenu] = useState<
     { viewNodeId: string; x: number; y: number } | undefined
   >();
@@ -112,10 +108,11 @@ const App: React.FC = () => {
       const sourceNode = cur.nodes.find(n => n.id === sourceNodeId);
       const targetNode = cur.nodes.find(n => n.id === targetNodeId);
       if (!sourceNode || !targetNode) return;
-      const kind = edgeKindRef.current;
+      // Drag-to-connect defaults to Association; the user can right-click
+      // the new edge to change its kind.
       const result = await requestMutation<{ id: string }>({
         kind: 'createRelationship',
-        relKind: kind,
+        relKind: 'Association',
         sourceId: sourceNode.elementId,
         targetId: targetNode.elementId
       });
@@ -432,21 +429,35 @@ const App: React.FC = () => {
     });
 
     const source = await showQuickPick(items, {
-      placeHolder: `Source for new ${edgeKindRef.current}`
+      placeHolder: 'Source classifier'
     });
     if (!source) return;
     const target = await showQuickPick(
       items.filter(i => i.nodeId !== source.nodeId),
-      { placeHolder: `Target for new ${edgeKindRef.current}` }
+      { placeHolder: 'Target classifier' }
     );
     if (!target) return;
+
+    const kinds: RelationshipKind[] = [
+      'Association',
+      'Aggregation',
+      'Generalization',
+      'Dependency'
+    ];
+    const kindPick = await showQuickPick(
+      kinds.map(k => ({ label: k })),
+      { placeHolder: 'Relationship kind' }
+    );
+    if (!kindPick) return;
+    const relKind = kinds.find(k => k === kindPick.label);
+    if (!relKind) return;
 
     const sourceNode = cur.nodes.find(n => n.id === source.nodeId);
     const targetNode = cur.nodes.find(n => n.id === target.nodeId);
     if (!sourceNode || !targetNode) return;
     const result = await requestMutation<{ id: string }>({
       kind: 'createRelationship',
-      relKind: edgeKindRef.current,
+      relKind,
       sourceId: sourceNode.elementId,
       targetId: targetNode.elementId
     });
@@ -550,8 +561,6 @@ const App: React.FC = () => {
         diagram={state.diagram}
         model={state.model}
         issues={state.issues}
-        edgeKind={edgeKind}
-        onEdgeKindChange={setEdgeKind}
         onAddClass={handleAddClass}
         onAddInterface={handleAddInterface}
         onAddModelClass={handleAddFromModel}

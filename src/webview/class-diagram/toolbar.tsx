@@ -15,8 +15,6 @@ interface ToolbarProps {
   diagram: ClassDiagramFile | undefined;
   model: ModelFile | undefined;
   issues: ValidationIssue[];
-  edgeKind: RelationshipKind;
-  onEdgeKindChange(kind: RelationshipKind): void;
   onAddClass(): void;
   onAddInterface(): void;
   onAddModelClass(): void;
@@ -27,17 +25,14 @@ interface ToolbarProps {
 /**
  * Top-of-canvas toolbar for the class diagram editor.
  *
- * The "Edge type" select picks what kind of relationship is created when
- * the user drags between two existing nodes — modelled on classic
- * diagramming-tool semantics so the canvas itself doesn't need a separate
- * picker per gesture.
+ * The "+ Edge…" button prompts for source, target, and kind. Drag-to-connect
+ * gestures create an Association by default; either way the kind can be
+ * changed afterwards by right-clicking the edge.
  */
 export const Toolbar: React.FC<ToolbarProps> = ({
   diagram,
   model,
   issues,
-  edgeKind,
-  onEdgeKindChange,
   onAddClass,
   onAddInterface,
   onAddModelClass,
@@ -58,21 +53,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <button onClick={onAddModelClass} title="Add an existing model class to this diagram">
         Add From Model…
       </button>
-      <label>
-        Edge type:&nbsp;
-        <select
-          value={edgeKind}
-          onChange={e => onEdgeKindChange(e.target.value as RelationshipKind)}
-        >
-          <option value="Association">Association</option>
-          <option value="Aggregation">Aggregation</option>
-          <option value="Generalization">Generalization</option>
-          <option value="Dependency">Dependency</option>
-        </select>
-      </label>
       <button
         onClick={onAddEdge}
-        title="Pick a source and target classifier to connect"
+        title="Pick source, target, and relationship kind"
       >
         + Edge…
       </button>
