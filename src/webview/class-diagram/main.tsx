@@ -422,23 +422,37 @@ const App: React.FC = () => {
     plugin?.fit({ margin: 24 });
   }, []);
 
+  const nodeMenuRef = useRef<HTMLDivElement>(null);
+
   // Dismiss the node context menu on any document interaction outside it.
   useEffect(() => {
     if (!nodeMenu) return;
-    const dismiss = () => setNodeMenu(undefined);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') dismiss();
+    const dismiss = (e: Event) => {
+      const target = e.target;
+      if (
+        target instanceof Node &&
+        nodeMenuRef.current &&
+        nodeMenuRef.current.contains(target)
+      ) {
+        return;
+      }
+      setNodeMenu(undefined);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNodeMenu(undefined);
+    };
+    // Defer attaching so the contextmenu event that opened us doesn't also
+    // close us.
     const t = setTimeout(() => {
-      window.addEventListener('mousedown', dismiss, true);
-      window.addEventListener('contextmenu', dismiss, true);
-      window.addEventListener('keydown', onKey, true);
+      window.addEventListener('mousedown', dismiss);
+      window.addEventListener('contextmenu', dismiss);
+      window.addEventListener('keydown', onKey);
     }, 0);
     return () => {
       clearTimeout(t);
-      window.removeEventListener('mousedown', dismiss, true);
-      window.removeEventListener('contextmenu', dismiss, true);
-      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', dismiss);
+      window.removeEventListener('contextmenu', dismiss);
+      window.removeEventListener('keydown', onKey);
     };
   }, [nodeMenu]);
 
@@ -459,6 +473,7 @@ const App: React.FC = () => {
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
       {nodeMenu && (
         <div
+          ref={nodeMenuRef}
           role="menu"
           style={{
             position: 'fixed',
