@@ -18,16 +18,14 @@ interface ToolbarProps {
   onAddClass(): void;
   onAddInterface(): void;
   onAddModelClass(): void;
-  onAddEdge(): void;
   onZoomFit(): void;
 }
 
 /**
  * Top-of-canvas toolbar for the class diagram editor.
  *
- * The "+ Edge…" button prompts for source, target, and kind. Drag-to-connect
- * gestures create an Association by default; either way the kind can be
- * changed afterwards by right-clicking the edge.
+ * Edges are created by dragging from one classifier's edge to another;
+ * the kind is changed afterwards via right-click on the resulting edge.
  */
 export const Toolbar: React.FC<ToolbarProps> = ({
   diagram,
@@ -36,7 +34,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddClass,
   onAddInterface,
   onAddModelClass,
-  onAddEdge,
   onZoomFit
 }) => {
   const elementCount = model ? Object.keys(model.elements).length : 0;
@@ -52,12 +49,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </button>
       <button onClick={onAddModelClass} title="Add an existing model class to this diagram">
         Add From Model…
-      </button>
-      <button
-        onClick={onAddEdge}
-        title="Pick source, target, and relationship kind"
-      >
-        + Edge…
       </button>
       <button onClick={onZoomFit}>Fit</button>
       <span className="vsuml-toolbar-info">

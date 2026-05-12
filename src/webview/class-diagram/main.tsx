@@ -417,60 +417,6 @@ const App: React.FC = () => {
     addExistingClassToDiagram(picked.elementId);
   }, [addExistingClassToDiagram]);
 
-  const handleAddEdge = useCallback(async () => {
-    const cur = stateRef.current.diagram;
-    const model = stateRef.current.model;
-    if (!cur || !model) return;
-    if (cur.nodes.length < 2) {
-      showMessage(
-        'info',
-        'Add at least two classifiers to the diagram before creating an edge.'
-      );
-      return;
-    }
-    type EdgePickItem = { label: string; description: string; nodeId: string };
-    const items: EdgePickItem[] = cur.nodes.flatMap(n => {
-      const el = model.elements[n.elementId];
-      if (!el) return [];
-      return [{ label: el.name, description: String(el.kind), nodeId: n.id }];
-    });
-
-    const source = await showQuickPick(items, {
-      placeHolder: 'Source classifier'
-    });
-    if (!source) return;
-    const target = await showQuickPick(
-      items.filter(
-        i =>
-          i.nodeId !== source.nodeId &&
-          !edgeExistsBetween(cur, source.nodeId, i.nodeId)
-      ),
-      { placeHolder: 'Target classifier (already-connected ones are hidden)' }
-    );
-    if (!target) return;
-
-    const sourceNode = cur.nodes.find(n => n.id === source.nodeId);
-    const targetNode = cur.nodes.find(n => n.id === target.nodeId);
-    if (!sourceNode || !targetNode) return;
-    // New edges default to Association; right-click the edge to retype.
-    const result = await requestMutation<{ id: string }>({
-      kind: 'createRelationship',
-      relKind: 'Association',
-      sourceId: sourceNode.elementId,
-      targetId: targetNode.elementId
-    });
-    if (!result) return;
-    const latest = stateRef.current.diagram;
-    if (!latest) return;
-    const newEdge: ClassDiagramEdge = {
-      id: makeId(),
-      elementId: result.id,
-      sourceNodeId: sourceNode.id,
-      targetNodeId: targetNode.id
-    };
-    updateDiagram({ ...latest, edges: [...latest.edges, newEdge] });
-  }, [updateDiagram]);
-
   const handleZoomFit = useCallback(() => {
     const g = graphRef.current;
     if (!g) return;
@@ -562,7 +508,6 @@ const App: React.FC = () => {
         onAddClass={handleAddClass}
         onAddInterface={handleAddInterface}
         onAddModelClass={handleAddFromModel}
-        onAddEdge={handleAddEdge}
         onZoomFit={handleZoomFit}
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
