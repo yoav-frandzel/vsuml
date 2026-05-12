@@ -8,7 +8,7 @@
 
 import { createRoot } from 'react-dom/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Graph, type FitPlugin } from '@maxgraph/core';
+import { Graph, SelectionHandler, type FitPlugin } from '@maxgraph/core';
 import { onHostMessage, post, log } from '../vscode-api.js';
 import {
   confirm,
@@ -205,6 +205,14 @@ const App: React.FC = () => {
     graph.setAllowDanglingEdges(false);
     graph.setMultigraph(true);
     graph.setTooltips(true);
+
+    // Live preview: move the actual cell + its connected edges in real time
+    // instead of just an outline. Default maxLivePreview is 0 (disabled).
+    const selection = graph.getPlugin<SelectionHandler>(SelectionHandler.pluginId);
+    if (selection) {
+      selection.maxLivePreview = 1000;
+    }
+
     graphRef.current = graph;
     const renderer = new ClassDiagramRenderer(graph, {
       onNodesMoved: m => callbacksRef.current.onNodesMoved(m),
