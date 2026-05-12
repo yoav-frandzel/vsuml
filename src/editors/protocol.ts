@@ -148,7 +148,7 @@ export interface ViewLogMessage {
 export interface ViewQuickPickMessage {
   type: 'view.quickPick';
   requestId: string;
-  items: Array<{ label: string; description?: string; detail?: string }>;
+  items: Array<{ label: string; description?: string }>;
   placeHolder?: string;
   title?: string;
 }

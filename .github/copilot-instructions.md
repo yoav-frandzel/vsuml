@@ -93,11 +93,12 @@ implicit task labels.
    `src/webview/vscode-api.ts` caches it. Import `post` / `onHostMessage`
    from there; do not call the underlying API directly.
 
-3. **QuickPick item id passthrough.** `vscode.window.showQuickPick` returns
-   the original item object. To recover an element id, stash it in the
-   item's `detail` field (not `description` and not by name-matching the
-   `label`). The shared `showQuickPick` helper returns
-   `{ label, description?, detail? }`.
+3. **QuickPick item passthrough.** The `showQuickPick` helper in
+   `webview/shared/rpc.ts` is generic over the item type; items can carry
+   any non-display fields (e.g. element ids) and the helper returns the
+   original picked object intact. Items are matched by index across the
+   RPC boundary, so do **not** put ids in `detail` — that field is
+   rendered on a second line and clutters the picker.
 
 4. **Drag-and-drop from a `TreeView` to a webview is not viable.** The
    `DataTransfer` payload does not cross the webview iframe boundary —

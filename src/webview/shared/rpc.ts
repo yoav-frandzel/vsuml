@@ -37,27 +37,33 @@ export function requestMutation<T>(
 }
 
 /**
- * Show a VS Code QuickPick. Resolves to the chosen item, or undefined if
- * the user cancelled. Pass element ids in `detail` to recover them on
- * resolution.
+ * Show a VS Code QuickPick.
+ *
+ * Items can carry any additional fields beyond {label, description}; only
+ * label and description are displayed. The original picked object is
+ * returned, so callers can attach element ids or other state directly on
+ * the item rather than smuggling them through the visible `detail` field.
  */
-export function showQuickPick(
-  items: Array<{ label: string; description?: string; detail?: string }>,
+export function showQuickPick<
+  T extends { label: string; description?: string }
+>(
+  items: T[],
   options?: { placeHolder?: string; title?: string }
-): Promise<{ label: string; description?: string; detail?: string } | undefined> {
+): Promise<T | undefined> {
   return new Promise(resolve => {
     const requestId = nextId();
     pendingRequests.set(requestId, (_ok, data) => {
-      resolve(
-        data as
-          | { label: string; description?: string; detail?: string }
-          | undefined
-      );
+      const ack = data as { index?: number } | undefined;
+      if (!ack || typeof ack.index !== 'number') {
+        resolve(undefined);
+      } else {
+        resolve(items[ack.index]);
+      }
     });
     post({
       type: 'view.quickPick',
       requestId,
-      items,
+      items: items.map(i => ({ label: i.label, description: i.description })),
       placeHolder: options?.placeHolder,
       title: options?.title
     });

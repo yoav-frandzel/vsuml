@@ -139,16 +139,16 @@ const App: React.FC = () => {
       const picked = await showQuickPick(
         kinds.map(k => ({
           label: k,
-          description: k === rel.relKind ? '(current)' : '',
-          detail: k
+          description: k === rel.relKind ? '(current)' : ''
         })),
         { placeHolder: 'Change edge type' }
       );
-      if (!picked || !picked.detail || picked.detail === rel.relKind) return;
+      const nextKind = kinds.find(k => k === picked?.label);
+      if (!nextKind || nextKind === rel.relKind) return;
       void requestMutation({
         kind: 'updateElement',
         id: rel.id,
-        patch: { relKind: picked.detail }
+        patch: { relKind: nextKind }
       });
     },
     onNodeDeleted: async viewNodeId => {
@@ -359,12 +359,12 @@ const App: React.FC = () => {
       candidates.map(c => ({
         label: c.name,
         description: c.kind,
-        detail: c.id
+        elementId: c.id
       })),
       { placeHolder: 'Pick a class or interface to add to the diagram' }
     );
-    if (!picked || !picked.detail) return;
-    addExistingClassToDiagram(picked.detail);
+    if (!picked) return;
+    addExistingClassToDiagram(picked.elementId);
   }, [addExistingClassToDiagram]);
 
   const handleAddEdge = useCallback(async () => {
@@ -378,25 +378,25 @@ const App: React.FC = () => {
       );
       return;
     }
-    type EdgePickItem = { label: string; description: string; detail: string };
+    type EdgePickItem = { label: string; description: string; nodeId: string };
     const items: EdgePickItem[] = cur.nodes.flatMap(n => {
       const el = model.elements[n.elementId];
       if (!el) return [];
-      return [{ label: el.name, description: String(el.kind), detail: n.id }];
+      return [{ label: el.name, description: String(el.kind), nodeId: n.id }];
     });
 
     const source = await showQuickPick(items, {
       placeHolder: `Source for new ${edgeKindRef.current}`
     });
-    if (!source || !source.detail) return;
+    if (!source) return;
     const target = await showQuickPick(
-      items.filter(i => i.detail !== source.detail),
+      items.filter(i => i.nodeId !== source.nodeId),
       { placeHolder: `Target for new ${edgeKindRef.current}` }
     );
-    if (!target || !target.detail) return;
+    if (!target) return;
 
-    const sourceNode = cur.nodes.find(n => n.id === source.detail);
-    const targetNode = cur.nodes.find(n => n.id === target.detail);
+    const sourceNode = cur.nodes.find(n => n.id === source.nodeId);
+    const targetNode = cur.nodes.find(n => n.id === target.nodeId);
     if (!sourceNode || !targetNode) return;
     const result = await requestMutation<{ id: string }>({
       kind: 'createRelationship',

@@ -134,17 +134,12 @@ export class BaseDiagramEditor implements vscode.CustomTextEditorProvider {
               placeHolder: raw.placeHolder,
               title: raw.title
             });
+            const index = pick ? raw.items.indexOf(pick) : -1;
             post({
               type: 'host.ack',
               requestId: raw.requestId,
               ok: true,
-              data: pick
-                ? {
-                    label: pick.label,
-                    description: pick.description,
-                    detail: pick.detail
-                  }
-                : undefined
+              data: index >= 0 ? { index } : undefined
             });
             break;
           }

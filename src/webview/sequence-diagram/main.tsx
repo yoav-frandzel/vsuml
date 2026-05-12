@@ -130,13 +130,13 @@ const App: React.FC = () => {
       return;
     }
     const picked = await showQuickPick(
-      candidates.map(c => ({ label: c.name, description: c.kind, detail: c.id })),
+      candidates.map(c => ({ label: c.name, description: c.kind, elementId: c.id })),
       { placeHolder: 'Pick a classifier to add as a lifeline' }
     );
-    if (!picked || !picked.detail) return;
+    if (!picked) return;
     const lifeline: Lifeline = {
       id: makeId(),
-      representsId: picked.detail,
+      representsId: picked.elementId,
       x: 0,
       y: 0,
       width: LIFELINE_HEADER_W,
@@ -155,16 +155,16 @@ const App: React.FC = () => {
     }
     const lifelineItems = cur.lifelines.map(l => ({
       label: lifelineLabel(model, l),
-      detail: l.id
+      lifelineId: l.id
     }));
     const src = await showQuickPick(lifelineItems, {
       placeHolder: 'Source lifeline (caller)'
     });
-    if (!src || !src.detail) return;
+    if (!src) return;
     const tgt = await showQuickPick(lifelineItems, {
       placeHolder: 'Target lifeline (callee)'
     });
-    if (!tgt || !tgt.detail) return;
+    if (!tgt) return;
 
     const kindPick = await showQuickPick(
       [
@@ -179,7 +179,7 @@ const App: React.FC = () => {
     if (!kindPick) return;
     const kind = kindPick.label as SequenceMessage['kind'];
 
-    const target = cur.lifelines.find(l => l.id === tgt.detail);
+    const target = cur.lifelines.find(l => l.id === tgt.lifelineId);
     if (!target) return;
     let operationId: string | undefined;
     let label: string | undefined;
@@ -213,11 +213,11 @@ const App: React.FC = () => {
         operationId = created.id;
       } else {
         const opPick = await showQuickPick(
-          ops.map(o => ({ label: o.name, detail: o.id })),
+          ops.map(o => ({ label: o.name, opId: o.id })),
           { placeHolder: `Which operation on ${targetClass.name}?` }
         );
-        if (!opPick || !opPick.detail) return;
-        operationId = opPick.detail;
+        if (!opPick) return;
+        operationId = opPick.opId;
       }
     } else {
       label = await showInputBox({
@@ -233,7 +233,7 @@ const App: React.FC = () => {
 
     const msg: SequenceMessage = {
       id: makeId(),
-      sourceLifelineId: src.detail,
+      sourceLifelineId: src.lifelineId,
       targetLifelineId: target.id,
       kind,
       y: nextY,
