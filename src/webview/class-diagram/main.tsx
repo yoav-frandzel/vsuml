@@ -108,6 +108,13 @@ const App: React.FC = () => {
       const sourceNode = cur.nodes.find(n => n.id === sourceNodeId);
       const targetNode = cur.nodes.find(n => n.id === targetNodeId);
       if (!sourceNode || !targetNode) return;
+      if (edgeExistsBetween(cur, sourceNodeId, targetNodeId)) {
+        showMessage(
+          'info',
+          'These two classifiers are already connected. Right-click the existing edge to change its kind.'
+        );
+        return;
+      }
       // Drag-to-connect defaults to Association; the user can right-click
       // the new edge to change its kind.
       const result = await requestMutation<{ id: string }>({
@@ -433,8 +440,12 @@ const App: React.FC = () => {
     });
     if (!source) return;
     const target = await showQuickPick(
-      items.filter(i => i.nodeId !== source.nodeId),
-      { placeHolder: 'Target classifier' }
+      items.filter(
+        i =>
+          i.nodeId !== source.nodeId &&
+          !edgeExistsBetween(cur, source.nodeId, i.nodeId)
+      ),
+      { placeHolder: 'Target classifier (already-connected ones are hidden)' }
     );
     if (!target) return;
 
@@ -778,6 +789,18 @@ const PopupMenu = React.forwardRef<
     </div>
   );
 });
+
+function edgeExistsBetween(
+  diagram: ClassDiagramFile,
+  a: string,
+  b: string
+): boolean {
+  return diagram.edges.some(
+    e =>
+      (e.sourceNodeId === a && e.targetNodeId === b) ||
+      (e.sourceNodeId === b && e.targetNodeId === a)
+  );
+}
 
 function makeId(): string {
   return (
