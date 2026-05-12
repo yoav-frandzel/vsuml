@@ -61,6 +61,7 @@ export class ClassDiagramRenderer {
   private readonly _vertexById = new Map<string, Cell>();
   private readonly _edgeById = new Map<string, Cell>();
   private _suppressEvents = false;
+  private _windowKeyDown?: (e: KeyboardEvent) => void;
 
   constructor(
     private readonly graph: Graph,
@@ -252,10 +253,19 @@ export class ClassDiagramRenderer {
       }
     });
 
-    // Delete key removes the selection.
-    this.graph.getContainer().addEventListener('keydown', (e: KeyboardEvent) => {
+    // Delete key removes the current selection. Listen on window so we
+    // don't depend on the graph container having keyboard focus (clicking
+    // a cell does not reliably focus the container). Skip when the user
+    // is typing in an input / textarea / contenteditable.
+    const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable) return;
+      }
       const cells = this.graph.getSelectionCells();
+      if (cells.length === 0) return;
       for (const cell of cells) {
         if (cell.isVertex()) {
           const id = idFromCell(cell, 'node');
@@ -265,7 +275,17 @@ export class ClassDiagramRenderer {
           if (id) this.callbacks.onEdgeDeleted(id);
         }
       }
-    });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    this._windowKeyDown = onKeyDown;
+  }
+
+  /** Detach window-scoped listeners. Call from the React cleanup. */
+  destroy(): void {
+    if (this._windowKeyDown) {
+      window.removeEventListener('keydown', this._windowKeyDown);
+      this._windowKeyDown = undefined;
+    }
   }
 }
 

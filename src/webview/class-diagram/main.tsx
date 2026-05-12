@@ -218,6 +218,7 @@ const App: React.FC = () => {
     });
     rendererRef.current = renderer;
     return () => {
+      renderer.destroy();
       graph.destroy();
       graphRef.current = null;
       rendererRef.current = null;
