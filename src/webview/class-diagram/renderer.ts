@@ -233,7 +233,13 @@ export class ClassDiagramRenderer {
         if (id) this.callbacks.onNodeActivated(id);
       } else if (cell.isEdge()) {
         const id = idFromCell(cell, 'edge');
-        if (id) this.callbacks.onEdgeActivated(id);
+        if (!id) return;
+        const me = evt.getProperty('event') as MouseEvent | undefined;
+        if (me) {
+          this.callbacks.onEdgeContextMenu(id, me.clientX, me.clientY);
+        } else {
+          this.callbacks.onEdgeActivated(id);
+        }
       }
     });
 
