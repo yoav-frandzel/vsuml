@@ -224,6 +224,41 @@ const App: React.FC = () => {
     []
   );
 
+  /* --- Lifeline popup (right-click on a lifeline) --- */
+
+  const [lifelineMenu, setLifelineMenu] = useState<
+    { lifelineId: string; x: number; y: number } | undefined
+  >();
+  const lifelineMenuRef = useRef<HTMLDivElement>(null);
+  useDismissOnOutsideClick(
+    !!lifelineMenu,
+    lifelineMenuRef,
+    () => setLifelineMenu(undefined)
+  );
+
+  const openLifelineMenu = useCallback(
+    (lifelineId: string, clientX: number, clientY: number) => {
+      setLifelineMenu({ lifelineId, x: clientX, y: clientY });
+    },
+    []
+  );
+
+  const deleteLifeline = useCallback(
+    (lifelineId: string) => {
+      const cur = stateRef.current.diagram;
+      if (!cur) return;
+      updateDiagram({
+        ...cur,
+        lifelines: cur.lifelines.filter(l => l.id !== lifelineId),
+        messages: cur.messages.filter(
+          m => m.sourceLifelineId !== lifelineId && m.targetLifelineId !== lifelineId
+        )
+      });
+      if (selected === lifelineId) setSelected(undefined);
+    },
+    [selected, updateDiagram]
+  );
+
   /* --- Message mutations from the popup --- */
 
   const setMessageOperation = useCallback(
@@ -379,6 +414,7 @@ const App: React.FC = () => {
             }}
             onCreateMessage={createMessage}
             onMessageContextMenu={openMessageMenu}
+            onLifelineContextMenu={openLifelineMenu}
           />
         ) : (
           'Loading…'
@@ -462,6 +498,24 @@ const App: React.FC = () => {
           ]}
         />
       )}
+      {lifelineMenu && (
+        <PopupMenu
+          ref={lifelineMenuRef}
+          x={lifelineMenu.x}
+          y={lifelineMenu.y}
+          items={[
+            {
+              label: 'Delete',
+              shortcut: 'Del',
+              onClick: () => {
+                const id = lifelineMenu.lifelineId;
+                setLifelineMenu(undefined);
+                deleteLifeline(id);
+              }
+            }
+          ]}
+        />
+      )}
     </>
   );
 };
@@ -482,6 +536,7 @@ interface SequenceSvgProps {
     dropY: number
   ): void;
   onMessageContextMenu(messageId: string, clientX: number, clientY: number): void;
+  onLifelineContextMenu(lifelineId: string, clientX: number, clientY: number): void;
 }
 
 const SequenceSvg: React.FC<SequenceSvgProps> = ({
@@ -491,7 +546,8 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
   onSelect,
   onReorder,
   onCreateMessage,
-  onMessageContextMenu
+  onMessageContextMenu,
+  onLifelineContextMenu
 }) => {
   const layout = layoutSequence(diagram);
   const sorted = sortMessages(diagram.messages);
@@ -606,6 +662,10 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
       onClick={() => onSelect(undefined)}
+      // Suppress the webview's default Cut/Copy/Paste menu anywhere on
+      // the canvas; specific elements (lifelines, messages) open their
+      // own popups.
+      onContextMenu={e => e.preventDefault()}
       style={{ userSelect: 'none', display: 'block' }}
     >
       <defs>
@@ -628,6 +688,12 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
           <g
             key={l.id}
             onMouseDown={e => onMouseDownLifeline(e, l.id)}
+            onContextMenu={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(l.id);
+              onLifelineContextMenu(l.id, e.clientX, e.clientY);
+            }}
             style={{ cursor: 'crosshair' }}
           >
             <rect
