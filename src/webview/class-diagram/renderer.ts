@@ -51,6 +51,8 @@ export interface ClassRendererCallbacks {
   onNodeContextMenu(viewNodeId: string, clientX: number, clientY: number): void;
   /** Double-click on an edge — surfaces an edit intent to the host. */
   onEdgeActivated(viewEdgeId: string): void;
+  /** Right-click on an edge — host shows a change-type popup at the click. */
+  onEdgeContextMenu(viewEdgeId: string, clientX: number, clientY: number): void;
   /** A node was deleted via the keyboard (Delete key). */
   onNodeDeleted(viewNodeId: string): void;
   /** An edge was deleted via the keyboard. */
@@ -246,7 +248,7 @@ export class ClassDiagramRenderer {
       if (!cell) return;
       if (cell.isEdge()) {
         const id = idFromCell(cell, 'edge');
-        if (id) this.callbacks.onEdgeActivated(id);
+        if (id) this.callbacks.onEdgeContextMenu(id, e.clientX, e.clientY);
       } else if (cell.isVertex()) {
         const id = idFromCell(cell, 'node');
         if (id) this.callbacks.onNodeContextMenu(id, e.clientX, e.clientY);

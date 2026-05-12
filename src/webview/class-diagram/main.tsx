@@ -57,6 +57,9 @@ const App: React.FC = () => {
   const [nodeMenu, setNodeMenu] = useState<
     { viewNodeId: string; x: number; y: number } | undefined
   >();
+  const [edgeMenu, setEdgeMenu] = useState<
+    { viewEdgeId: string; x: number; y: number } | undefined
+  >();
 
   /** Updates the local diagram, persists it through the host, and re-renders. */
   const updateDiagram = useCallback((next: ClassDiagramFile) => {
@@ -173,6 +176,9 @@ const App: React.FC = () => {
     onNodeContextMenu: (viewNodeId, x, y) => {
       setNodeMenu({ viewNodeId, x, y });
     },
+    onEdgeContextMenu: (viewEdgeId, x, y) => {
+      setEdgeMenu({ viewEdgeId, x, y });
+    },
     onEdgeDeleted: async viewEdgeId => {
       const cur = stateRef.current.diagram;
       if (!cur) return;
@@ -221,6 +227,8 @@ const App: React.FC = () => {
       onEdgeActivated: id => callbacksRef.current.onEdgeActivated(id),
       onNodeContextMenu: (id, x, y) =>
         callbacksRef.current.onNodeContextMenu(id, x, y),
+      onEdgeContextMenu: (id, x, y) =>
+        callbacksRef.current.onEdgeContextMenu(id, x, y),
       onNodeDeleted: id => callbacksRef.current.onNodeDeleted(id),
       onEdgeDeleted: id => callbacksRef.current.onEdgeDeleted(id)
     });
@@ -433,26 +441,32 @@ const App: React.FC = () => {
   }, []);
 
   const nodeMenuRef = useRef<HTMLDivElement>(null);
+  const edgeMenuRef = useRef<HTMLDivElement>(null);
 
-  // Dismiss the node context menu on any document interaction outside it.
+  // Dismiss either context menu on any document interaction outside it.
   useEffect(() => {
-    if (!nodeMenu) return;
+    if (!nodeMenu && !edgeMenu) return;
     const dismiss = (e: Event) => {
       const target = e.target;
-      if (
+      const insideNode =
         target instanceof Node &&
         nodeMenuRef.current &&
-        nodeMenuRef.current.contains(target)
-      ) {
-        return;
-      }
+        nodeMenuRef.current.contains(target);
+      const insideEdge =
+        target instanceof Node &&
+        edgeMenuRef.current &&
+        edgeMenuRef.current.contains(target);
+      if (insideNode || insideEdge) return;
       setNodeMenu(undefined);
+      setEdgeMenu(undefined);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setNodeMenu(undefined);
+      if (e.key === 'Escape') {
+        setNodeMenu(undefined);
+        setEdgeMenu(undefined);
+      }
     };
-    // Defer attaching so the contextmenu event that opened us doesn't also
-    // close us.
+    // Defer so the contextmenu event that opened us doesn't also close us.
     const t = setTimeout(() => {
       window.addEventListener('mousedown', dismiss);
       window.addEventListener('contextmenu', dismiss);
@@ -464,7 +478,19 @@ const App: React.FC = () => {
       window.removeEventListener('contextmenu', dismiss);
       window.removeEventListener('keydown', onKey);
     };
-  }, [nodeMenu]);
+  }, [nodeMenu, edgeMenu]);
+
+  const edgeMenuRel = (() => {
+    if (!edgeMenu) return undefined;
+    const diagram = state.diagram;
+    const model = state.model;
+    if (!diagram || !model) return undefined;
+    const edge = diagram.edges.find(e => e.id === edgeMenu.viewEdgeId);
+    if (!edge) return undefined;
+    const rel = model.elements[edge.elementId];
+    if (!rel || rel.kind !== 'Relationship') return undefined;
+    return rel;
+  })();
 
   return (
     <>
@@ -482,33 +508,106 @@ const App: React.FC = () => {
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
       {nodeMenu && (
-        <div
+        <PopupMenu
           ref={nodeMenuRef}
-          role="menu"
-          style={{
-            position: 'fixed',
-            left: nodeMenu.x,
-            top: nodeMenu.y,
-            zIndex: 1000,
-            background: 'var(--vscode-menu-background)',
-            color: 'var(--vscode-menu-foreground)',
-            border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            padding: '4px 0',
-            minWidth: 160,
-            fontFamily: 'var(--vscode-font-family)',
-            fontSize: 12
-          }}
-          onMouseDown={e => e.stopPropagation()}
-          onContextMenu={e => e.preventDefault()}
-        >
-          <button
-            role="menuitem"
-            onClick={() => {
-              const id = nodeMenu.viewNodeId;
-              setNodeMenu(undefined);
-              void callbacks.onNodeDeleted(id);
+          x={nodeMenu.x}
+          y={nodeMenu.y}
+          items={[
+            {
+              label: 'Delete',
+              shortcut: 'Del',
+              onClick: () => {
+                const id = nodeMenu.viewNodeId;
+                setNodeMenu(undefined);
+                void callbacks.onNodeDeleted(id);
+              }
+            }
+          ]}
+        />
+      )}
+      {edgeMenu && edgeMenuRel && (
+        <PopupMenu
+          ref={edgeMenuRef}
+          x={edgeMenu.x}
+          y={edgeMenu.y}
+          items={[
+            ...(
+              ['Association', 'Aggregation', 'Generalization', 'Dependency'] as const
+            ).map(k => ({
+              label: k,
+              shortcut: k === edgeMenuRel.relKind ? '✓' : '',
+              onClick: () => {
+                const relId = edgeMenuRel.id;
+                setEdgeMenu(undefined);
+                if (k === edgeMenuRel.relKind) return;
+                void requestMutation({
+                  kind: 'updateElement',
+                  id: relId,
+                  patch: { relKind: k }
+                });
+              }
+            })),
+            { separator: true } as const,
+            {
+              label: 'Delete',
+              shortcut: 'Del',
+              onClick: () => {
+                const id = edgeMenu.viewEdgeId;
+                setEdgeMenu(undefined);
+                void callbacks.onEdgeDeleted(id);
+              }
+            }
+          ]}
+        />
+      )}
+    </>
+  );
+};
+
+type PopupMenuItem =
+  | { label: string; shortcut?: string; onClick: () => void; separator?: false }
+  | { separator: true };
+
+const PopupMenu = React.forwardRef<
+  HTMLDivElement,
+  { x: number; y: number; items: PopupMenuItem[] }
+>(function PopupMenu({ x, y, items }, ref) {
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      style={{
+        position: 'fixed',
+        left: x,
+        top: y,
+        zIndex: 1000,
+        background: 'var(--vscode-menu-background)',
+        color: 'var(--vscode-menu-foreground)',
+        border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        padding: '4px 0',
+        minWidth: 180,
+        fontFamily: 'var(--vscode-font-family)',
+        fontSize: 12
+      }}
+      onMouseDown={e => e.stopPropagation()}
+      onContextMenu={e => e.preventDefault()}
+    >
+      {items.map((it, i) =>
+        'separator' in it && it.separator ? (
+          <div
+            key={`sep-${i}`}
+            style={{
+              height: 1,
+              margin: '4px 0',
+              background: 'var(--vscode-menu-separatorBackground, rgba(255,255,255,0.1))'
             }}
+          />
+        ) : (
+          <button
+            key={i}
+            role="menuitem"
+            onClick={it.onClick}
             style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -531,14 +630,16 @@ const App: React.FC = () => {
               (e.currentTarget as HTMLElement).style.color = 'inherit';
             }}
           >
-            <span>Delete</span>
-            <span style={{ opacity: 0.7, marginLeft: 16 }}>Del</span>
+            <span>{it.label}</span>
+            {it.shortcut && (
+              <span style={{ opacity: 0.7, marginLeft: 16 }}>{it.shortcut}</span>
+            )}
           </button>
-        </div>
+        )
       )}
-    </>
+    </div>
   );
-};
+});
 
 function makeId(): string {
   return (
