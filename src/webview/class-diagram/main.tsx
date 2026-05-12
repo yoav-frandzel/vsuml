@@ -159,18 +159,27 @@ const App: React.FC = () => {
       if (!cur) return;
       const node = cur.nodes.find(n => n.id === viewNodeId);
       if (!node) return;
+      const incident = cur.edges.filter(
+        e => e.sourceNodeId === viewNodeId || e.targetNodeId === viewNodeId
+      );
+      const detail =
+        incident.length === 0
+          ? 'The class stays in the model.'
+          : `The class stays in the model. ${incident.length} relationship(s) attached to it will be deleted from the model.`;
       const remove = await confirm(
-        'Remove this view node from the diagram? (The class stays in the model.)',
+        `Remove this view node from the diagram? ${detail}`,
         'Remove'
       );
       if (!remove) return;
-      const nextEdges = cur.edges.filter(
-        e => e.sourceNodeId !== viewNodeId && e.targetNodeId !== viewNodeId
-      );
+      for (const e of incident) {
+        void requestMutation({ kind: 'deleteElement', id: e.elementId });
+      }
       updateDiagram({
         ...cur,
         nodes: cur.nodes.filter(n => n.id !== viewNodeId),
-        edges: nextEdges
+        edges: cur.edges.filter(
+          e => e.sourceNodeId !== viewNodeId && e.targetNodeId !== viewNodeId
+        )
       });
     },
     onNodeContextMenu: (viewNodeId, x, y) => {
@@ -184,13 +193,12 @@ const App: React.FC = () => {
       if (!cur) return;
       const edge = cur.edges.find(e => e.id === viewEdgeId);
       if (!edge) return;
-      const removeModel = await confirm(
-        'Also delete the underlying relationship from the model? (Cancel removes from this diagram only.)',
-        'Delete from model'
+      const remove = await confirm(
+        'Delete this relationship (from the diagram and the model)?',
+        'Delete'
       );
-      if (removeModel) {
-        void requestMutation({ kind: 'deleteElement', id: edge.elementId });
-      }
+      if (!remove) return;
+      void requestMutation({ kind: 'deleteElement', id: edge.elementId });
       updateDiagram({
         ...cur,
         edges: cur.edges.filter(e => e.id !== viewEdgeId)
