@@ -583,6 +583,7 @@ const App: React.FC = () => {
               ['Association', 'Aggregation', 'Generalization', 'Dependency'] as const
             ).map(k => ({
               label: k,
+              icon: <EdgeKindIcon kind={k} />,
               shortcut: k === edgeMenuRel.relKind ? '✓' : '',
               onClick: () => {
                 const relId = edgeMenuRel.id;
@@ -612,14 +613,89 @@ const App: React.FC = () => {
   );
 };
 
+const EDGE_ICON_W = 56;
+const EDGE_ICON_H = 14;
+
+const EdgeKindIcon: React.FC<{ kind: RelationshipKind }> = ({ kind }) => {
+  const cy = EDGE_ICON_H / 2;
+  // Use currentColor so the icon follows menu text color (incl. hover).
+  // Fill the closed heads with the menu background so they read as
+  // "hollow" against any theme.
+  const fill = 'var(--vscode-menu-background)';
+  switch (kind) {
+    case 'Association':
+      return (
+        <svg width={EDGE_ICON_W} height={EDGE_ICON_H} aria-hidden>
+          <line x1={2} y1={cy} x2={46} y2={cy} stroke="currentColor" />
+          <path
+            d={`M 46 ${cy - 4} L 54 ${cy} L 46 ${cy + 4}`}
+            fill="none"
+            stroke="currentColor"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'Aggregation':
+      return (
+        <svg width={EDGE_ICON_W} height={EDGE_ICON_H} aria-hidden>
+          <path
+            d={`M 2 ${cy} L 9 ${cy - 4} L 16 ${cy} L 9 ${cy + 4} z`}
+            fill={fill}
+            stroke="currentColor"
+            strokeLinejoin="round"
+          />
+          <line x1={16} y1={cy} x2={54} y2={cy} stroke="currentColor" />
+        </svg>
+      );
+    case 'Generalization':
+      return (
+        <svg width={EDGE_ICON_W} height={EDGE_ICON_H} aria-hidden>
+          <line x1={2} y1={cy} x2={42} y2={cy} stroke="currentColor" />
+          <path
+            d={`M 42 ${cy - 5} L 53 ${cy} L 42 ${cy + 5} z`}
+            fill={fill}
+            stroke="currentColor"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case 'Dependency':
+      return (
+        <svg width={EDGE_ICON_W} height={EDGE_ICON_H} aria-hidden>
+          <line
+            x1={2}
+            y1={cy}
+            x2={46}
+            y2={cy}
+            stroke="currentColor"
+            strokeDasharray="3 2"
+          />
+          <path
+            d={`M 46 ${cy - 4} L 54 ${cy} L 46 ${cy + 4}`}
+            fill="none"
+            stroke="currentColor"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+  }
+};
+
 type PopupMenuItem =
-  | { label: string; shortcut?: string; onClick: () => void; separator?: false }
+  | {
+      label: string;
+      shortcut?: string;
+      icon?: React.ReactNode;
+      onClick: () => void;
+      separator?: false;
+    }
   | { separator: true };
 
 const PopupMenu = React.forwardRef<
   HTMLDivElement,
   { x: number; y: number; items: PopupMenuItem[] }
 >(function PopupMenu({ x, y, items }, ref) {
+  const hasIcons = items.some(it => 'icon' in it && it.icon);
   return (
     <div
       ref={ref}
@@ -634,7 +710,7 @@ const PopupMenu = React.forwardRef<
         border: '1px solid var(--vscode-menu-border, var(--vscode-panel-border))',
         boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         padding: '4px 0',
-        minWidth: 180,
+        minWidth: 200,
         fontFamily: 'var(--vscode-font-family)',
         fontSize: 12
       }}
@@ -658,9 +734,10 @@ const PopupMenu = React.forwardRef<
             onClick={it.onClick}
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              alignItems: 'center',
               width: '100%',
               padding: '4px 12px',
+              gap: 10,
               background: 'transparent',
               color: 'inherit',
               border: 0,
@@ -678,7 +755,20 @@ const PopupMenu = React.forwardRef<
               (e.currentTarget as HTMLElement).style.color = 'inherit';
             }}
           >
-            <span>{it.label}</span>
+            {hasIcons && (
+              <span
+                style={{
+                  width: EDGE_ICON_W,
+                  height: EDGE_ICON_H,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  flex: '0 0 auto'
+                }}
+              >
+                {it.icon ?? null}
+              </span>
+            )}
+            <span style={{ flex: 1 }}>{it.label}</span>
             {it.shortcut && (
               <span style={{ opacity: 0.7, marginLeft: 16 }}>{it.shortcut}</span>
             )}
