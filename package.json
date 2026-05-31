@@ -2,15 +2,31 @@
   "name": "vsuml",
   "displayName": "VS UML Modeling",
   "description": "UML class, sequence, and state diagram modeling with a shared workspace model.",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "publisher": "vsuml",
-  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yoav-frandzel/vsuml"
+  },
+  "homepage": "https://github.com/yoav-frandzel/vsuml#readme",
+  "bugs": {
+    "url": "https://github.com/yoav-frandzel/vsuml/issues"
+  },
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Visualization",
     "Other"
+  ],
+  "keywords": [
+    "uml",
+    "class diagram",
+    "sequence diagram",
+    "state diagram",
+    "modeling"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [

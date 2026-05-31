@@ -1,5 +1,8 @@
 # VS UML Modeling
 
+[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/vsuml.vsuml)](https://marketplace.visualstudio.com/items?itemName=vsuml.vsuml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A Visual Studio Code extension that brings back the core of the UML modeling
 experience from Visual Studio 2010: a **shared workspace model** of UML
 elements (classes, operations, state machines, ...) projected onto multiple
@@ -8,6 +11,20 @@ diagrams of three kinds — class, sequence, and state.
 Editing a class once is reflected on every diagram that references it.
 UML is used here as an abstraction; there is **no** two-way binding to source
 code.
+
+## Features
+
+- **Class Diagrams** — visualize classes, interfaces, and relationships
+  (association, aggregation, generalization, dependency)
+- **Sequence Diagrams** — model object interactions with lifelines and messages
+  (sync, async, reply, create)
+- **State Diagrams** — define state machines with states, transitions, guards,
+  and effects
+- **Shared Model** — all diagrams reference one workspace model; change a class
+  once and every diagram updates
+- **Model Explorer** — tree view for browsing and editing model elements
+- **Validation** — real-time diagnostics in the Problems panel
+- **Mermaid Export** — one-click export to `.mmd` for embedding in docs
 
 ## Quick start
 
