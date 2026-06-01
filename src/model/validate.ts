@@ -51,6 +51,29 @@ export function validateModel(model: ModelFile): ValidationIssue[] {
     });
   }
 
+  // Duplicate classifier names within the same owner.
+  const classifiersByOwner = new Map<string, Map<string, ModelElement>>();
+  for (const el of Object.values(model.elements)) {
+    if (el.kind === 'Class' || el.kind === 'Interface') {
+      const ownerKey = el.ownerId ?? '';
+      let seen = classifiersByOwner.get(ownerKey);
+      if (!seen) {
+        seen = new Map();
+        classifiersByOwner.set(ownerKey, seen);
+      }
+      const prev = seen.get(el.name);
+      if (prev) {
+        issues.push({
+          severity: 'error',
+          message: `Duplicate classifier name "${el.name}" in the same package.`,
+          locator: el.id
+        });
+      } else {
+        seen.set(el.name, el);
+      }
+    }
+  }
+
   for (const el of Object.values(model.elements)) {
     // Owner integrity (every non-root element points at an existing parent).
     if (el.id !== model.rootPackageId) {

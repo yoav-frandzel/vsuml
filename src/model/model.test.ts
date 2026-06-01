@@ -3,7 +3,9 @@ import {
   createAttribute,
   createClass,
   createEmptyModel,
+  createInterface,
   createOperation,
+  createPackage,
   createParameter,
   createRelationship,
   createState,
@@ -88,6 +90,56 @@ describe('validateModel', () => {
     expect(
       issues.some(i => i.message.includes('missing parameter'))
     ).toBe(true);
+  });
+
+  it('rejects duplicate class names in the same package', () => {
+    const m = createEmptyModel();
+    const c1 = createClass('Order', m.rootPackageId);
+    const c2 = createClass('Order', m.rootPackageId);
+    m.elements[c1.id] = c1;
+    m.elements[c2.id] = c2;
+    const issues = validateModel(m);
+    expect(issues.some(i => i.message.includes('Duplicate classifier name'))).toBe(true);
+  });
+
+  it('rejects duplicate interface names in the same package', () => {
+    const m = createEmptyModel();
+    const i1 = createInterface('Serializable', m.rootPackageId);
+    const i2 = createInterface('Serializable', m.rootPackageId);
+    m.elements[i1.id] = i1;
+    m.elements[i2.id] = i2;
+    const issues = validateModel(m);
+    expect(issues.some(i => i.message.includes('Duplicate classifier name'))).toBe(true);
+  });
+
+  it('rejects a class and interface with the same name in the same package', () => {
+    const m = createEmptyModel();
+    const cls = createClass('Foo', m.rootPackageId);
+    const ifc = createInterface('Foo', m.rootPackageId);
+    m.elements[cls.id] = cls;
+    m.elements[ifc.id] = ifc;
+    const issues = validateModel(m);
+    expect(issues.some(i => i.message.includes('Duplicate classifier name'))).toBe(true);
+  });
+
+  it('allows the same classifier name in different packages', () => {
+    const m = createEmptyModel();
+    const pkg = createPackage('SubPkg', m.rootPackageId);
+    m.elements[pkg.id] = pkg;
+    const c1 = createClass('Order', m.rootPackageId);
+    const c2 = createClass('Order', pkg.id);
+    m.elements[c1.id] = c1;
+    m.elements[c2.id] = c2;
+    expect(validateModel(m)).toEqual([]);
+  });
+
+  it('allows distinct classifier names in the same package', () => {
+    const m = createEmptyModel();
+    const c1 = createClass('Order', m.rootPackageId);
+    const c2 = createClass('Customer', m.rootPackageId);
+    m.elements[c1.id] = c1;
+    m.elements[c2.id] = c2;
+    expect(validateModel(m)).toEqual([]);
   });
 
   it('flags an owner pointing at a missing parent', () => {
