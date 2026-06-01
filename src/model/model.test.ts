@@ -90,6 +90,16 @@ describe('validateModel', () => {
     ).toBe(true);
   });
 
+  it('rejects duplicate class names in the same package', () => {
+    const m = createEmptyModel();
+    const c1 = createClass('Order', m.rootPackageId);
+    const c2 = createClass('Order', m.rootPackageId);
+    m.elements[c1.id] = c1;
+    m.elements[c2.id] = c2;
+    const issues = validateModel(m);
+    expect(issues.some(i => i.message.includes('Duplicate classifier name'))).toBe(true);
+  });
+
   it('flags an owner pointing at a missing parent', () => {
     const m = createEmptyModel();
     const cls = createClass('Orphan', 'nope');
