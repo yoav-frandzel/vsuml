@@ -96,6 +96,10 @@ export class ModelService implements vscode.Disposable {
     fn: (model: ModelFile) => Promise<ModelChangeEvent> | ModelChangeEvent
   ): Promise<ModelChangeEvent> {
     const model = await this.getModel();
+
+    // Snapshot the elements map so we can roll back on validation failure.
+    const snapshot = { ...model.elements };
+
     const event = await fn(model);
 
     for (const removedId of event.removed) {
@@ -105,6 +109,8 @@ export class ModelService implements vscode.Disposable {
     const issues = validateModel(model);
     const errors = issues.filter(i => i.severity === 'error');
     if (errors.length > 0) {
+      // Roll back the in-memory model to the pre-mutation state.
+      model.elements = snapshot;
       throw new ModelValidationError(errors);
     }
 

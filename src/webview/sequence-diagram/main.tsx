@@ -21,6 +21,7 @@ import type {
   Lifeline,
   ModelFile,
   Operation,
+  Relationship,
   SequenceDiagramFile,
   SequenceMessage,
   ValidationIssue
@@ -36,6 +37,30 @@ import {
   sortMessages,
   type SequenceLayout
 } from './layout.js';
+
+/**
+ * Collect the classifier id plus all ancestor ids reachable via
+ * Generalization relationships (source = child, target = parent).
+ */
+function collectAncestorIds(model: ModelFile, classifierId: string): string[] {
+  const result: string[] = [classifierId];
+  const visited = new Set<string>([classifierId]);
+  const rels = Object.values(model.elements).filter(
+    (e): e is Relationship => e.kind === 'Relationship' && e.relKind === 'Generalization'
+  );
+  const queue = [classifierId];
+  while (queue.length > 0) {
+    const cur = queue.pop()!;
+    for (const r of rels) {
+      if (r.sourceId === cur && !visited.has(r.targetId)) {
+        visited.add(r.targetId);
+        result.push(r.targetId);
+        queue.push(r.targetId);
+      }
+    }
+  }
+  return result;
+}
 
 interface AppState {
   model: ModelFile | undefined;
@@ -356,10 +381,13 @@ const App: React.FC = () => {
       ? model.elements[targetLifeline.representsId]
       : undefined;
     const ops: Operation[] = targetClassifier
-      ? (Object.values(model.elements).filter(
-          (e): e is Operation =>
-            e.kind === 'Operation' && e.ownerId === targetClassifier.id
-        ))
+      ? (() => {
+          const ownerIds = new Set(collectAncestorIds(model, targetClassifier.id));
+          return Object.values(model.elements).filter(
+            (e): e is Operation =>
+              e.kind === 'Operation' && ownerIds.has(e.ownerId!)
+          );
+        })()
       : [];
 
     const opItems = ops.map(op => ({
