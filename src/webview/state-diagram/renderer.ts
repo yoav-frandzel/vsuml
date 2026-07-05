@@ -28,6 +28,22 @@ export interface StateRendererCallbacks {
   onNodeDoubleClicked(elementId: string): void;
 }
 
+/** Computed theme colors cached per session. */
+let _stateTheme: { fg: string; text: string } | undefined;
+
+function getStateThemeColors() {
+  if (_stateTheme) return _stateTheme;
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const s = getComputedStyle(el);
+  _stateTheme = {
+    fg: s.getPropertyValue('--vscode-foreground').trim() || '#333333',
+    text: s.getPropertyValue('--vscode-editor-foreground').trim() || '#333333'
+  };
+  document.body.removeChild(el);
+  return _stateTheme;
+}
+
 const NODE_PREFIX = 'snode:';
 const EDGE_PREFIX = 'sedge:';
 
@@ -143,6 +159,7 @@ export class StateDiagramRenderer {
         if (existing) {
           this.graph.getDataModel().setValue(existing, lbl);
         } else {
+          const { fg, text } = getStateThemeColors();
           const cellId = EDGE_PREFIX + edge.id;
           const e = this.graph.insertEdge({
             parent,
@@ -152,8 +169,8 @@ export class StateDiagramRenderer {
             value: lbl,
             style: {
               endArrow: 'classic',
-              strokeColor: '#888',
-              fontColor: '#bbb',
+              strokeColor: fg,
+              fontColor: text,
               fontSize: 11
             }
           });
@@ -189,6 +206,7 @@ export class StateDiagramRenderer {
     }
     const cellId = NODE_PREFIX + node.id;
     let cell: Cell;
+    const { fg } = getStateThemeColors();
     if (kind === 'Initial') {
       cell = this.graph.insertVertex({
         parent,
@@ -196,7 +214,7 @@ export class StateDiagramRenderer {
         value: '',
         position: [node.x, node.y],
         size: [24, 24],
-        style: { shape: 'ellipse', fillColor: '#222', strokeColor: '#222' }
+        style: { shape: 'ellipse', fillColor: fg, strokeColor: fg }
       });
     } else if (kind === 'Final') {
       cell = this.graph.insertVertex({
@@ -207,8 +225,8 @@ export class StateDiagramRenderer {
         size: [28, 28],
         style: {
           shape: 'doubleEllipse',
-          fillColor: '#222',
-          strokeColor: '#222'
+          fillColor: fg,
+          strokeColor: fg
         }
       });
     } else if (kind === 'Choice') {

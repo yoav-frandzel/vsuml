@@ -301,22 +301,35 @@ export class ClassDiagramRenderer {
 /* Styling                                                              */
 /* ------------------------------------------------------------------ */
 
+/** Computed theme colors cached per session (webview lifecycle). */
+let _themeColors: { bg: string; border: string; fg: string; text: string } | undefined;
+
+function getThemeColors() {
+  if (_themeColors) return _themeColors;
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const s = getComputedStyle(el);
+  _themeColors = {
+    bg: s.getPropertyValue('--vscode-editorWidget-background').trim() || '#f3f3f3',
+    border: s.getPropertyValue('--vscode-editorWidget-border').trim() || '#d0d0d0',
+    fg: s.getPropertyValue('--vscode-foreground').trim() || '#333333',
+    text: s.getPropertyValue('--vscode-editor-foreground').trim() || '#333333'
+  };
+  document.body.removeChild(el);
+  return _themeColors;
+}
+
 function classifierStyle(c: Class | Interface): Record<string, unknown> {
-  // Visible appearance lives on the SVG cell shape so edge perimeter
-  // calculations (which use the cell's geometry rectangle) align with what
-  // the user sees. maxGraph applies fillColor / strokeColor via
-  // setAttribute('fill', value.toLowerCase()) so CSS variables don't
-  // resolve there -- use literal colors tuned for the VS Code dark theme
-  // (the predominant case); they degrade reasonably under light themes.
+  const { bg, border, text } = getThemeColors();
   return {
     shape: 'rectangle',
     rounded: 1,
     arcSize: 8,
     html: 1,
     whiteSpace: 'wrap',
-    fillColor: '#2d2d30',
-    strokeColor: '#888888',
-    fontColor: 'var(--vscode-editor-foreground)',
+    fillColor: bg,
+    strokeColor: border,
+    fontColor: text,
     align: 'left',
     verticalAlign: 'top',
     spacing: 0,
@@ -327,9 +340,10 @@ function classifierStyle(c: Class | Interface): Record<string, unknown> {
 function edgeStyle(
   kind: 'Association' | 'Aggregation' | 'Generalization' | 'Dependency'
 ): Record<string, unknown> {
+  const { fg, text } = getThemeColors();
   const base: Record<string, unknown> = {
-    strokeColor: 'var(--vscode-foreground)',
-    fontColor: 'var(--vscode-editor-foreground)',
+    strokeColor: fg,
+    fontColor: text,
     rounded: false,
     endSize: 10,
     startSize: 12

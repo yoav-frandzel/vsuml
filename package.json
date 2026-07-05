@@ -2,7 +2,7 @@
   "name": "vsuml",
   "displayName": "VS UML Modeling",
   "description": "UML class, sequence, and state diagram modeling with a shared workspace model.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "YoavFrandzel",
   "license": "MIT",
   "repository": {
