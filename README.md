@@ -88,6 +88,25 @@ npm test
 Open the folder in VS Code and press `F5` to launch an Extension Development
 Host.
 
+## Building an installer (.vsix)
+
+The extension ships as a standard VS Code `.vsix` package built with
+[`@vscode/vsce`](https://github.com/microsoft/vscode-vsce):
+
+```bash
+npm install
+npm run package           # produces vsuml-<version>.vsix
+npm run install-extension # build + install into your local VS Code
+```
+
+To install a pre-built `.vsix` manually:
+
+```bash
+code --install-extension vsuml-0.0.1.vsix
+```
+
+Or in VS Code: **Extensions** view → `...` menu → **Install from VSIX...**
+
 ## Architecture
 
 - **Model service** (`src/model/`): single source of truth. Loads and saves

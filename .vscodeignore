@@ -1,14 +1,26 @@
-.vscode/**
-.vscode-test/**
-.github/**
+# Source — only the bundled output ships
 src/**
 node_modules/**
+.vscode-test/**
+.vscode/**
+.github/**
+
+# Build inputs / configs
 esbuild.mjs
 tsconfig.json
 vitest.config.ts
 .eslintrc.cjs
 .gitignore
-*.vsix
+.gitattributes
+
+# Source maps add ~MB and aren't useful to end users
+dist/**/*.map
+media/**/*.map
+
+# Tests
 **/*.test.ts
 **/*.test.js
-**/*.map
+
+# Misc dev artefacts
+*.vsix
+package-lock.json
