@@ -31,6 +31,7 @@ import {
 } from './renderer.js';
 import { Toolbar, type RelationshipKind } from './toolbar.js';
 import { PopupMenu } from '../shared/popup-menu.js';
+import { installGraphPanZoom, type GraphPanZoomController } from '../shared/pan.js';
 
 interface AppState {
   model: ModelFile | undefined;
@@ -42,6 +43,8 @@ const App: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
   const rendererRef = useRef<ClassDiagramRenderer | null>(null);
+  const panZoomRef = useRef<GraphPanZoomController | null>(null);
+  const [zoomPct, setZoomPct] = useState(100);
 
   const [state, setState] = useState<AppState>({
     model: undefined,
@@ -266,7 +269,11 @@ const App: React.FC = () => {
       onEdgeDeleted: id => callbacksRef.current.onEdgeDeleted(id)
     });
     rendererRef.current = renderer;
+    const panZoom = installGraphPanZoom(graph, s => setZoomPct(Math.round(s * 100)));
+    panZoomRef.current = panZoom;
     return () => {
+      panZoom.dispose();
+      panZoomRef.current = null;
       renderer.destroy();
       graph.destroy();
       graphRef.current = null;
@@ -534,6 +541,10 @@ const App: React.FC = () => {
         onAddModelClass={handleAddFromModel}
         fitActive={fitActive}
         onToggleFit={handleToggleFit}
+        zoomPercent={zoomPct}
+        onZoomIn={() => panZoomRef.current?.zoomIn()}
+        onZoomOut={() => panZoomRef.current?.zoomOut()}
+        onZoomReset={() => panZoomRef.current?.reset()}
       />
       <div className="vsuml-canvas" ref={canvasRef} tabIndex={0} />
       {nodeMenu && (

@@ -44,6 +44,8 @@ export function renderDiagramHtml(
       .vsuml-toolbar strong { margin-right: 8px; }
       .vsuml-toolbar button, .vsuml-toolbar select { background: var(--vscode-button-secondaryBackground, var(--vscode-button-background)); color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); border: 1px solid var(--vscode-button-border, transparent); padding: 2px 8px; cursor: pointer; font-size: 12px; font-family: inherit; }
       .vsuml-toolbar button:hover { background: var(--vscode-button-hoverBackground); }
+      .vsuml-zoom { display: inline-flex; align-items: center; gap: 2px; }
+      .vsuml-zoom button { min-width: 24px; text-align: center; }
       .vsuml-toolbar-info { margin-left: auto; opacity: 0.75; }
       .vsuml-canvas { flex: 1; overflow: hidden; position: relative; outline: none; }
       .vsuml-status { padding: 4px 8px; font-size: 12px; border-top: 1px solid var(--vscode-editorWidget-border); background: var(--vscode-statusBar-background); color: var(--vscode-statusBar-foreground); }

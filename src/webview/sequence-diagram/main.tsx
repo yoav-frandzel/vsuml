@@ -7,7 +7,7 @@
  */
 
 import { createRoot } from 'react-dom/client';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { onHostMessage, post } from '../vscode-api.js';
 import {
   requestMutation,
@@ -17,6 +17,7 @@ import {
   showQuickPick
 } from '../shared/rpc.js';
 import { PopupMenu, useDismissOnOutsideClick } from '../shared/popup-menu.js';
+import { installScrollPan } from '../shared/pan.js';
 import type {
   Lifeline,
   ModelFile,
@@ -77,6 +78,55 @@ const App: React.FC = () => {
   const stateRef = useRef(state);
   stateRef.current = state;
   const [selected, setSelected] = useState<string | undefined>();
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const zoomAnchorRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    return installScrollPan(canvasRef.current);
+  }, []);
+
+  // Zoom around a client point (defaults to the viewport centre). The scroll
+  // adjustment is deferred to a layout effect so it runs after the SVG resizes.
+  const applyZoom = useCallback((factor: number, clientX?: number, clientY?: number) => {
+    const el = canvasRef.current;
+    setZoom(prev => {
+      const next = Math.min(4, Math.max(0.25, prev * factor));
+      if (next === prev) return prev;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const cx = clientX ?? rect.left + el.clientWidth / 2;
+        const cy = clientY ?? rect.top + el.clientHeight / 2;
+        const contentX = el.scrollLeft + (cx - rect.left);
+        const contentY = el.scrollTop + (cy - rect.top);
+        const ratio = next / prev;
+        zoomAnchorRef.current = { dx: contentX * (ratio - 1), dy: contentY * (ratio - 1) };
+      }
+      return next;
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    const anchor = zoomAnchorRef.current;
+    if (el && anchor) {
+      el.scrollLeft += anchor.dx;
+      el.scrollTop += anchor.dy;
+    }
+    zoomAnchorRef.current = null;
+  }, [zoom]);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      applyZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [applyZoom]);
 
   const updateDiagram = useCallback((next: SequenceDiagramFile) => {
     setState(prev => ({ ...prev, diagram: next }));
@@ -424,17 +474,24 @@ const App: React.FC = () => {
       <div className="vsuml-toolbar">
         <strong>{state.diagram?.name ?? 'Sequence Diagram'}</strong>
         <button onClick={handleAddLifeline}>+ Lifeline</button>
+        <span className="vsuml-zoom">
+          <button onClick={() => applyZoom(1 / 1.15)} title="Zoom out">−</button>
+          <button onClick={() => applyZoom(1 / zoom)} title="Reset zoom to 100%">{Math.round(zoom * 100)}%</button>
+          <button onClick={() => applyZoom(1.15)} title="Zoom in">+</button>
+        </span>
         <span className="vsuml-toolbar-info">
           Drag from one lifeline to another to add a message · {state.diagram?.lifelines.length ?? 0} lifeline(s) · {state.diagram?.messages.length ?? 0} message(s)
           {state.issues.length > 0 && ` · ⚠ ${state.issues.length} issue(s)`}
+          {' · Space/middle-drag to pan · scroll to zoom'}
         </span>
       </div>
-      <div className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
+      <div ref={canvasRef} className="vsuml-canvas" style={{ overflow: 'auto', padding: 16 }} tabIndex={0}>
         {state.diagram ? (
           <SequenceSvg
             model={state.model}
             diagram={state.diagram}
             selected={selected}
+            zoom={zoom}
             onSelect={setSelected}
             onReorder={messages => {
               const cur = stateRef.current.diagram;
@@ -556,6 +613,7 @@ interface SequenceSvgProps {
   model: ModelFile | undefined;
   diagram: SequenceDiagramFile;
   selected: string | undefined;
+  zoom: number;
   onSelect(id: string | undefined): void;
   onReorder(messages: SequenceMessage[]): void;
   onCreateMessage(
@@ -571,6 +629,7 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
   model,
   diagram,
   selected,
+  zoom,
   onSelect,
   onReorder,
   onCreateMessage,
@@ -623,7 +682,7 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
 
   const onMouseMove = (e: React.MouseEvent) => {
     if (dragRef.current) {
-      const dy = e.clientY - dragRef.current.startY;
+      const dy = (e.clientY - dragRef.current.startY) / zoom;
       setDragY({ id: dragRef.current.id, y: dragRef.current.origY + dy });
       return;
     }
@@ -684,8 +743,9 @@ const SequenceSvg: React.FC<SequenceSvgProps> = ({
   return (
     <svg
       ref={svgRef}
-      width={layout.totalWidth}
-      height={layout.totalHeight}
+      width={layout.totalWidth * zoom}
+      height={layout.totalHeight * zoom}
+      viewBox={`0 0 ${layout.totalWidth} ${layout.totalHeight}`}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
@@ -882,6 +942,16 @@ function svgPointFromEvent(
   svg: SVGSVGElement | null
 ): { x: number; y: number } | undefined {
   if (!svg) return undefined;
+  // getScreenCTM accounts for viewBox scaling (zoom) and scroll position, so
+  // this returns coordinates in the SVG's own user units regardless of zoom.
+  const ctm = svg.getScreenCTM();
+  if (ctm) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const mapped = pt.matrixTransform(ctm.inverse());
+    return { x: mapped.x, y: mapped.y };
+  }
   const rect = svg.getBoundingClientRect();
   return { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }

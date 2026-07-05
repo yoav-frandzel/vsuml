@@ -22,6 +22,7 @@ import {
   StateDiagramRenderer,
   type StateRendererCallbacks
 } from './renderer.js';
+import { installGraphPanZoom, type GraphPanZoomController } from '../shared/pan.js';
 
 interface AppState {
   model: ModelFile | undefined;
@@ -33,6 +34,8 @@ const App: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
   const rendererRef = useRef<StateDiagramRenderer | null>(null);
+  const panZoomRef = useRef<GraphPanZoomController | null>(null);
+  const [zoomPct, setZoomPct] = useState(100);
 
   const [state, setState] = useState<AppState>({
     model: undefined,
@@ -176,7 +179,11 @@ const App: React.FC = () => {
     };
     graph.getContainer().addEventListener('keydown', onKeyDown);
     graph.getContainer().tabIndex = 0;
+    const panZoom = installGraphPanZoom(graph, s => setZoomPct(Math.round(s * 100)));
+    panZoomRef.current = panZoom;
     return () => {
+      panZoom.dispose();
+      panZoomRef.current = null;
       graph.getContainer().removeEventListener('keydown', onKeyDown);
       graph.destroy();
       graphRef.current = null;
@@ -288,9 +295,15 @@ const App: React.FC = () => {
         <button onClick={() => addState('Final')}>+ Final</button>
         <button onClick={() => addState('Choice')}>+ Choice</button>
         <button onClick={handleFit}>Fit</button>
+        <span className="vsuml-zoom">
+          <button onClick={() => panZoomRef.current?.zoomOut()} title="Zoom out">−</button>
+          <button onClick={() => panZoomRef.current?.reset()} title="Reset zoom to 100%">{zoomPct}%</button>
+          <button onClick={() => panZoomRef.current?.zoomIn()} title="Zoom in">+</button>
+        </span>
         <span className="vsuml-toolbar-info">
           {state.diagram?.nodes.length ?? 0} state(s) · {state.diagram?.edges.length ?? 0} transition(s)
           {state.issues.length > 0 && ` · ⚠ ${state.issues.length} issue(s)`}
+          {' · Space/middle-drag to pan · scroll to zoom'}
         </span>
       </div>
       <div ref={canvasRef} className="vsuml-canvas" tabIndex={0}/>

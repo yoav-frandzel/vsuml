@@ -20,6 +20,10 @@ interface ToolbarProps {
   onAddModelClass(): void;
   fitActive: boolean;
   onToggleFit(): void;
+  zoomPercent: number;
+  onZoomIn(): void;
+  onZoomOut(): void;
+  onZoomReset(): void;
 }
 
 /**
@@ -36,7 +40,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAddInterface,
   onAddModelClass,
   fitActive,
-  onToggleFit
+  onToggleFit,
+  zoomPercent,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset
 }) => {
   const elementCount = model ? Object.keys(model.elements).length : 0;
   const issueLabel = issues.length === 0 ? '' : ` · ⚠ ${issues.length}`;
@@ -58,8 +66,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       >
         {fitActive ? 'Reset View' : 'Fit'}
       </button>
+      <span className="vsuml-zoom">
+        <button onClick={onZoomOut} title="Zoom out">−</button>
+        <button onClick={onZoomReset} title="Reset zoom to 100%">{zoomPercent}%</button>
+        <button onClick={onZoomIn} title="Zoom in">+</button>
+      </span>
       <span className="vsuml-toolbar-info">
-        {elementCount} model element(s) · {diagram?.nodes.length ?? 0} node(s) · {diagram?.edges.length ?? 0} edge(s){issueLabel}
+        {elementCount} model element(s) · {diagram?.nodes.length ?? 0} node(s) · {diagram?.edges.length ?? 0} edge(s){issueLabel} · Space/middle-drag to pan · Ctrl/⌘+scroll to zoom
       </span>
     </div>
   );
